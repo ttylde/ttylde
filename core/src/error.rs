@@ -1,0 +1,43 @@
+use std::{fmt, io};
+
+/// Core errors. An enum rather than `Box<dyn Error>` so callers can tell
+/// the cases apart without parsing the message.
+#[derive(Debug)]
+pub enum Error {
+    /// Opening, spawning or resizing the PTY failed.
+    Pty(anyhow::Error),
+    /// Reading from or writing to the PTY failed.
+    Io(io::Error),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::Pty(e) => write!(f, "pty: {e}"),
+            Error::Io(e) => write!(f, "io: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Pty(e) => Some(e.as_ref()),
+            Error::Io(e) => Some(e),
+        }
+    }
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(e: anyhow::Error) -> Self {
+        Error::Pty(e)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Self {
+        Error::Io(e)
+    }
+}

@@ -1,0 +1,502 @@
+use alacritty_terminal::{
+    index::{Column, Line},
+    vte::ansi::{Color, NamedColor, Rgb},
+};
+
+use super::*;
+
+#[test]
+fn write_text_on_two_lines() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"hello\r\nrust!");
+
+    assert_eq!(emulator.line_text(0), "hello");
+    assert_eq!(emulator.line_text(1), "rust!");
+}
+
+#[test]
+fn check_cursor_position() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"hello\r\nrust!");
+
+    let point = emulator.term.grid().cursor.point;
+    assert_eq!(point.line, Line(1));
+    assert_eq!(point.column, Column(5));
+
+    emulator.feed(b"\r\n");
+    let point = emulator.term.grid().cursor.point;
+    assert_eq!(point.line, Line(2));
+    assert_eq!(point.column, Column(0));
+}
+
+#[test]
+fn check_the_escape_parsing() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b[31mrosso");
+
+    let cell = &emulator.term.grid()[Line(0)][Column(0)];
+    let cell_color = cell.fg;
+    let line_text = emulator.line_text(0);
+    assert_eq!(cell_color, Color::Named(NamedColor::Red));
+    assert_eq!(line_text, "rosso");
+}
+
+// The three kinds of `Color` resolve to `0xRRGGBB` through the theme.
+#[test]
+fn resolve_colors_with_the_theme() {
+    let emulator = Emulator::new(20, 5, Theme::default(), 100);
+
+    assert_eq!(
+        emulator.resolve(Color::Named(NamedColor::Red)),
+        emulator.theme.ansi[1]
+    );
+    assert_eq!(
+        emulator.resolve(Color::Named(NamedColor::Foreground)),
+        emulator.theme.foreground
+    );
+    assert_eq!(emulator.resolve(Color::Indexed(196)), 0xff0000);
+    assert_eq!(
+        emulator.resolve(Color::Spec(Rgb { r: 1, g: 2, b: 3 })),
+        0x010203
+    );
+}
+
+// Adjacent cells with the same style merge into a single segment.
+#[test]
+fn two_styles_make_two_segments() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b[31mab");
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments.len(), 2);
+    assert_eq!(segments[0].text, "ab");
+    assert_eq!(segments[0].cols, 2);
+    assert_eq!(segments[0].fg, emulator.theme.ansi[1]);
+    // the rest of the row: spaces with default colors
+    assert_eq!(segments[1].cols, 18);
+    assert_eq!(segments[1].fg, emulator.theme.foreground);
+    assert_eq!(segments[1].bg, emulator.theme.background);
+}
+
+// A color change mid-row starts a new segment.
+#[test]
+fn color_change_splits_the_segment() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"a\x1b[31mb");
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments.len(), 3);
+    assert_eq!(segments[0].text, "a");
+    assert_eq!(segments[1].text, "b");
+    assert_eq!(segments[1].fg, emulator.theme.ansi[1]);
+}
+
+// Several attributes on one cell end up as bits in the same `u8`.
+#[test]
+fn attributes_are_combined_as_bits() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b[1;4mx");
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(
+        segments[0].flags,
+        SegmentFlags::BOLD | SegmentFlags::UNDERLINE
+    );
+    assert_eq!(segments[1].flags, 0);
+}
+
+// `INVERSE` swaps foreground and background already in the core.
+#[test]
+fn inverse_swaps_the_colors() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b[7mx");
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments[0].fg, emulator.theme.background);
+    assert_eq!(segments[0].bg, emulator.theme.foreground);
+}
+
+// A wide character takes two columns and its spacer is skipped.
+#[test]
+fn wide_char_takes_two_columns() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed("日".as_bytes());
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments[0].text, "日");
+    assert_eq!(segments[0].cols, 2);
+    assert_eq!(segments[0].flags, SegmentFlags::WIDE);
+    assert_eq!(segments[1].cols, 18);
+}
+
+// The cursor follows the written text, with the default block shape.
+#[test]
+fn cursor_follows_the_text() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"ping");
+
+    let expected = Cursor {
+        row: 0,
+        col: 4,
+        shape: CursorShape::Block,
+        color: Theme::default().cursor,
+    };
+    assert_eq!(emulator.cursor(), Some(expected));
+}
+
+// `\x1b[?25l` hides the cursor, `\x1b[?25h` shows it again.
+#[test]
+fn hidden_cursor_is_none() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+
+    emulator.feed(b"\x1b[?25l");
+    assert_eq!(emulator.cursor(), None);
+
+    emulator.feed(b"\x1b[?25h");
+    assert!(emulator.cursor().is_some());
+}
+
+// Programs change the cursor shape with `DECSCUSR` (`\x1b[ q`).
+#[test]
+fn cursor_shape_follows_the_program() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+
+    emulator.feed(b"\x1b[6 q");
+    assert_eq!(emulator.cursor().unwrap().shape, CursorShape::Beam);
+
+    emulator.feed(b"\x1b[4 q");
+    assert_eq!(emulator.cursor().unwrap().shape, CursorShape::Underline);
+}
+
+// `CSI ? 1 h` enables application cursor keys, `CSI ? 2004 h` bracketed paste.
+#[test]
+fn input_mode_follows_the_program() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    let mode = emulator.input_mode();
+    assert!(!mode.app_cursor);
+    assert!(!mode.bracketed_paste);
+    assert!(!mode.alt_screen);
+    // as in xterm, alternate scroll is on by default
+    assert!(mode.alternate_scroll);
+
+    emulator.feed(b"\x1b[?1h\x1b[?2004h\x1b[?1049h");
+    let mode = emulator.input_mode();
+    assert!(mode.app_cursor);
+    assert!(mode.bracketed_paste);
+    assert!(mode.alt_screen);
+}
+
+// Rows that scroll off the screen stay in the history, with negative indices.
+#[test]
+fn scrolled_out_lines_stay_in_history() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    for i in 0..10 {
+        emulator.feed(format!("row {i}\r\n").as_bytes());
+    }
+
+    // 11 rows touched (10 written plus the empty cursor row), 5 visible
+    assert_eq!(emulator.term.grid().history_size(), 6);
+    // Line(-1) is the row just above the screen: "row 5"
+    assert_eq!(emulator.term.grid()[Line(-1)][Column(4)].c, '5');
+    assert_eq!(emulator.line_text(0), "row 6");
+}
+
+// Scrolling moves the view into the history and stops at its bounds.
+#[test]
+fn scrolling_shows_the_history() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    for i in 0..10 {
+        emulator.feed(format!("row {i}\r\n").as_bytes());
+    }
+
+    emulator.scroll(3);
+    assert_eq!(emulator.display_offset(), 3);
+    assert_eq!(emulator.line_text(0), "row 3");
+
+    // no going past the history: the view stops at the first row
+    emulator.scroll(100);
+    assert_eq!(emulator.display_offset(), 6);
+    assert_eq!(emulator.line_text(0), "row 0");
+
+    emulator.scroll_to_bottom();
+    assert_eq!(emulator.display_offset(), 0);
+    assert_eq!(emulator.line_text(0), "row 6");
+}
+
+// A scroll produces a full frame; a no-op scroll produces none.
+#[test]
+fn scroll_produces_a_full_frame_only_when_the_view_moves() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    for i in 0..10 {
+        emulator.feed(format!("row {i}\r\n").as_bytes());
+    }
+    emulator.frame();
+
+    emulator.scroll(2);
+    let frame = emulator.frame().unwrap();
+    assert!(frame.full);
+    assert_eq!(frame.lines[0].segments[0].text.trim_end(), "row 4");
+    assert_eq!((frame.offset, frame.history), (2, 6));
+
+    // already at the bottom: scrolling down changes nothing
+    emulator.scroll_to_bottom();
+    emulator.frame();
+    emulator.scroll(-1);
+    assert_eq!(emulator.frame(), None);
+}
+
+// Scrolling back pushes the cursor past the bottom edge, where it disappears.
+#[test]
+fn cursor_disappears_when_scrolled_back() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    for i in 0..10 {
+        emulator.feed(format!("row {i}\r\n").as_bytes());
+    }
+    assert_eq!(emulator.cursor().unwrap().row, 4);
+
+    emulator.scroll(1);
+    assert_eq!(emulator.cursor(), None);
+
+    emulator.scroll_to_bottom();
+    assert_eq!(emulator.cursor().unwrap().row, 4);
+}
+
+// The first frame is full: the renderer starts from an empty screen.
+#[test]
+fn first_frame_is_full() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+
+    let frame = emulator.frame().unwrap();
+    assert!(frame.full);
+    assert_eq!(frame.lines.len(), 5);
+    assert_eq!((frame.cols, frame.rows), (20, 5));
+}
+
+// After the first frame only the touched rows are sent.
+#[test]
+fn next_frame_has_only_changed_lines() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.frame();
+
+    emulator.feed(b"ping");
+    let frame = emulator.frame().unwrap();
+    assert!(!frame.full);
+    assert_eq!(frame.lines.len(), 1);
+    assert_eq!(frame.lines[0].row, 0);
+    // "ping" and the spaces after it share a style: a single segment
+    assert!(frame.lines[0].segments[0].text.starts_with("ping"));
+    assert_eq!(frame.lines[0].segments[0].cols, 20);
+}
+
+// Nothing new, no frame.
+#[test]
+fn no_changes_means_no_frame() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.frame();
+
+    assert_eq!(emulator.frame(), None);
+}
+
+// Moving the cursor dirties both the row it left and the row it reached.
+#[test]
+fn cursor_move_damages_both_lines() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"ping");
+    emulator.frame();
+
+    emulator.feed(b"\r\n");
+    let frame = emulator.frame().unwrap();
+    let rows: Vec<u16> = frame.lines.iter().map(|l| l.row).collect();
+    assert_eq!(rows, vec![0, 1]);
+    assert_eq!(frame.cursor.unwrap().row, 1);
+}
+
+// Dragging from (0,0) to (1,2) selects the first two rows.
+#[test]
+fn dragging_selects_a_range_of_text() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo\r\ndue\r\ntre");
+
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Simple);
+    emulator.update_selection(1, 2, SelectionSide::Right);
+
+    assert_eq!(emulator.selection_text(), Some("foo\ndue".to_string()));
+}
+
+// Double click takes the word, triple click the whole row (newline included).
+#[test]
+fn word_and_line_selection() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo bar\r\ntre");
+
+    emulator.start_selection(0, 5, SelectionSide::Left, SelectionKind::Word);
+    assert_eq!(emulator.selection_text(), Some("bar".to_string()));
+
+    emulator.start_selection(0, 5, SelectionSide::Left, SelectionKind::Line);
+    assert_eq!(emulator.selection_text(), Some("foo bar\n".to_string()));
+}
+
+// No selection, no text; same after `clear_selection`.
+#[test]
+fn clearing_removes_the_selection() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo");
+    assert_eq!(emulator.selection_text(), None);
+
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Line);
+    emulator.clear_selection();
+
+    assert_eq!(emulator.selection_text(), None);
+}
+
+// Selection follows the history: row 0 of a scrolled screen is the old row.
+#[test]
+fn selection_uses_screen_coordinates_when_scrolled() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo\r\ndue\r\ntre\r\nquattro\r\ncinque\r\nsei\r\nsette");
+    emulator.scroll(2);
+
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Line);
+
+    assert_eq!(emulator.selection_text(), Some("foo\n".to_string()));
+}
+
+// Changing the selection produces a frame, even without new output.
+#[test]
+fn selection_changes_make_the_emulator_dirty() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo");
+    emulator.frame();
+
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Simple);
+    assert!(emulator.frame().is_some());
+
+    emulator.clear_selection();
+    assert!(emulator.frame().is_some());
+
+    emulator.clear_selection();
+    assert_eq!(emulator.frame(), None);
+}
+
+// Selected cells get the theme's selection background, the others don't.
+#[test]
+fn selected_cells_get_the_selection_background() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    let theme = Theme::default();
+    emulator.feed(b"foo bar");
+
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Simple);
+    emulator.update_selection(0, 2, SelectionSide::Right);
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments[0].text, "foo");
+    assert_eq!(segments[0].bg, theme.selection);
+    assert_eq!(segments[1].bg, theme.background);
+}
+
+// The selection wins even over an INVERSE cell.
+#[test]
+fn selection_background_overrides_inverse() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b[7mab\x1b[0m");
+
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Word);
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments[0].text, "ab");
+    assert_eq!(segments[0].bg, Theme::default().selection);
+    assert_eq!(segments[0].fg, Theme::default().background);
+}
+
+// After `clear_selection` the background is back to normal.
+#[test]
+fn clearing_restores_the_background() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo");
+
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Line);
+    emulator.clear_selection();
+
+    let segments = emulator.line_segments(0);
+    assert!(segments.iter().all(|s| s.bg == Theme::default().background));
+}
+
+// Starting a selection dirties its rows, not just the cursor row.
+#[test]
+fn selection_damages_its_rows() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo\r\ndue\r\ntre\r\nquattro");
+    emulator.frame();
+
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Simple);
+    emulator.update_selection(1, 2, SelectionSide::Right);
+
+    let frame = emulator.frame().unwrap();
+    assert!(!frame.full);
+    let rows: Vec<u16> = frame.lines.iter().map(|l| l.row).collect();
+    // rows 0 and 1 selected, row 3 holds the cursor
+    assert_eq!(rows, vec![0, 1, 3]);
+}
+
+// Shrinking the selection also redraws the rows that lost it.
+#[test]
+fn shrinking_the_selection_redraws_the_old_rows() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo\r\ndue\r\ntre\r\nquattro");
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Simple);
+    emulator.update_selection(2, 2, SelectionSide::Right);
+    emulator.frame();
+
+    emulator.update_selection(0, 2, SelectionSide::Right);
+
+    let frame = emulator.frame().unwrap();
+    let rows: Vec<u16> = frame.lines.iter().map(|l| l.row).collect();
+    assert_eq!(rows, vec![0, 1, 2, 3]);
+    let background = Theme::default().background;
+    let row1 = &frame.lines[1];
+    assert!(row1.segments.iter().all(|s| s.bg == background));
+}
+
+// Clearing the selection redraws the rows that were selected.
+#[test]
+fn clearing_the_selection_redraws_its_rows() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo\r\ndue\r\ntre\r\nquattro");
+    emulator.start_selection(1, 0, SelectionSide::Left, SelectionKind::Line);
+    emulator.frame();
+
+    emulator.clear_selection();
+
+    let frame = emulator.frame().unwrap();
+    let rows: Vec<u16> = frame.lines.iter().map(|l| l.row).collect();
+    assert_eq!(rows, vec![1, 3]);
+}
+
+// A selection that scrolled into the history yields no off-screen rows.
+#[test]
+fn selection_rows_are_clipped_to_the_screen() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"foo\r\ndue\r\ntre");
+    emulator.start_selection(0, 0, SelectionSide::Left, SelectionKind::Simple);
+    emulator.update_selection(1, 2, SelectionSide::Right);
+    emulator.frame();
+
+    // five more rows push the first two into the history
+    emulator.feed(b"\r\n4\r\n5\r\n6\r\n7\r\n8");
+
+    let frame = emulator.frame().unwrap();
+    assert!(frame.lines.iter().all(|l| l.row < 5));
+}
+
+// The frame carries the theme background; a program can change it with OSC 11.
+#[test]
+fn frame_carries_the_background_color() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    assert_eq!(
+        emulator.frame().unwrap().background,
+        Theme::default().background
+    );
+
+    emulator.feed(b"\x1b]11;#102030\x07");
+    assert_eq!(emulator.frame().unwrap().background, 0x102030);
+}
