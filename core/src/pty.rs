@@ -1,13 +1,27 @@
-use std::io::{self, Read, Write};
+use std::{
+    io::{self, Read, Write},
+    sync::{Arc, Mutex},
+};
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, ExitStatus, MasterPty, PtySize};
 
 use crate::error::Result;
 
+#[derive(Clone)]
+pub struct PtyWriter(Arc<Mutex<Box<dyn Write + Send>>>);
+
+impl PtyWriter {
+    pub fn write(&self, bytes: &[u8]) -> io::Result<()> {
+        let mut writer = self.0.lock().unwrap();
+        writer.write_all(bytes)?;
+        writer.flush()
+    }
+}
+
 pub struct Pty {
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send + Sync>,
-    writer: Box<dyn Write + Send>,
+    writer: PtyWriter,
 }
 
 impl Pty {
@@ -25,19 +39,21 @@ impl Pty {
 
         Ok(Pty {
             child,
-            writer,
+            writer: PtyWriter(Arc::new(Mutex::new(writer))),
             master: pair.master,
         })
+    }
+
+    pub fn writer(&self) -> PtyWriter {
+        self.writer.clone()
     }
 
     pub fn reader(&self) -> Result<Box<dyn Read + Send>> {
         Ok(self.master.try_clone_reader()?)
     }
 
-    pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        self.writer.write_all(bytes)?;
-        self.writer.flush()?;
-        Ok(())
+    pub fn write(&self, bytes: &[u8]) -> io::Result<()> {
+        self.writer.write(bytes)
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> Result<()> {
@@ -87,5 +103,35 @@ mod tests {
         pty.wait().unwrap();
         let str_out = String::from_utf8_lossy(&output);
         assert!(str_out.contains("got Dhkasd987"));
+    }
+
+    // A clone of the writer reaches the shell from another thread.
+    #[test]
+    fn cloned_writer_writes_from_another_thread() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.arg("-c");
+        cmd.arg("read IN; echo \"got $IN\"");
+
+        let mut pty = Pty::spawn(cmd, 80, 24).unwrap();
+        let mut reader = pty.reader().unwrap();
+        let writer = pty.writer();
+        std::thread::spawn(move || writer.write(b"ping\n").unwrap())
+            .join()
+            .unwrap();
+
+        let mut output: Vec<u8> = Vec::new();
+        let mut buf = [0u8; 4096];
+        loop {
+            let out = reader.read(&mut buf);
+            match out {
+                Ok(0) => break,
+                Ok(n) => output.extend_from_slice(&buf[..n]),
+                Err(_) => break,
+            }
+        }
+
+        pty.wait().unwrap();
+        let str_out = String::from_utf8_lossy(&output);
+        assert!(str_out.contains("got ping"));
     }
 }
