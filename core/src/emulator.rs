@@ -108,7 +108,8 @@ impl Emulator {
         self.parser.advance(&mut self.term, bytes);
     }
 
-    pub fn line_text(&self, row: usize) -> String {
+    #[cfg(test)]
+    fn line_text(&self, row: usize) -> String {
         let total_cols = self.term.columns();
         let mut text = String::new();
         let offset = self.display_offset() as i32;
