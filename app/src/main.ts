@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { attachKeyboard } from "./input";
 import { attachMouse } from "./mouse";
@@ -8,6 +9,8 @@ import type { SessionEvent } from "./types";
 const canvas = document.querySelector<HTMLCanvasElement>("#screen")!;
 const notice = document.querySelector<HTMLDivElement>("#notice")!;
 const renderer = new Renderer(canvas, "Menlo, Monaco, monospace", 13);
+const appWindow = getCurrentWindow();
+const DEFAULT_TITLE = "Ttylde";
 
 // The canvas fills the window; the core decides what goes in each cell.
 function fitToWindow(): { cols: number; rows: number } {
@@ -16,13 +19,34 @@ function fitToWindow(): { cols: number; rows: number } {
 
 const onEvent = new Channel<SessionEvent>();
 onEvent.onmessage = (event) => {
-  if (event.type === "Exit") {
-    notice.textContent = "The shell has exited.";
-    notice.hidden = false;
-    return;
+  switch (event.type) {
+    case "Frame":
+      renderer.apply(event.data);
+      break;
+    case "Title":
+      void appWindow.setTitle(event.data);
+      break;
+    case "TitleReset":
+      void appWindow.setTitle(DEFAULT_TITLE);
+      break;
+    case "Bell":
+      flashBell();
+      break;
+    case "Exit":
+      notice.textContent = "The shell has exited.";
+      notice.hidden = false;
+      break;
   }
-  renderer.apply(event.data);
 };
+
+// Visual bell: the screen brightens for a moment. A bell that rings while
+// the flash is on restarts it.
+let bellTimer: number | undefined;
+function flashBell(): void {
+  canvas.classList.add("bell");
+  window.clearTimeout(bellTimer);
+  bellTimer = window.setTimeout(() => canvas.classList.remove("bell"), 120);
+}
 
 const size = fitToWindow();
 const sessionId = await invoke<number>("session_open", { ...size, onEvent });

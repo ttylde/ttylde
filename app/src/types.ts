@@ -25,7 +25,12 @@ export type Frame = {
   history: number;
 };
 
-export type SessionEvent = { type: "Frame"; data: Frame } | { type: "Exit" };
+export type SessionEvent =
+  | { type: "Frame"; data: Frame }
+  | { type: "Title"; data: string }
+  | { type: "TitleReset" }
+  | { type: "Bell" }
+  | { type: "Exit" };
 
 // Same bits as SegmentFlags in the core.
 export const SegmentFlags = {
