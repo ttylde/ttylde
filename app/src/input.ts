@@ -41,7 +41,8 @@ function keyOf(e: KeyboardEvent): Key | null {
 }
 
 /**
- * Wires the keyboard to a session.
+ * Wires the keyboard to the session `activeId` returns at the time of each
+ * key; with no session the input is dropped.
  *
  * The hidden textarea has focus: the system composes text there (dead keys,
  * Option, IME) and we read it ready-made from the `input` event. Only
@@ -49,7 +50,7 @@ function keyOf(e: KeyboardEvent): Key | null {
  *
  * Returns the textarea: it is the one that also receives `copy`.
  */
-export function attachKeyboard(canvas: HTMLCanvasElement, sessionId: number): HTMLTextAreaElement {
+export function attachKeyboard(activeId: () => number | null): HTMLTextAreaElement {
   const textarea = document.createElement("textarea");
   textarea.id = "keyboard";
   textarea.autocapitalize = "off";
@@ -64,8 +65,10 @@ export function attachKeyboard(canvas: HTMLCanvasElement, sessionId: number): HT
     const key = keyOf(e);
     if (!key) return;
     e.preventDefault();
+    const id = activeId();
+    if (id === null) return;
     const mods: Mods = { shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey };
-    void invoke("session_key", { id: sessionId, key, mods });
+    void invoke("session_key", { id, key, mods });
   });
 
   textarea.addEventListener("input", (e) => {
@@ -77,21 +80,18 @@ export function attachKeyboard(canvas: HTMLCanvasElement, sessionId: number): HT
   textarea.addEventListener("paste", (e) => {
     e.preventDefault();
     const text = e.clipboardData?.getData("text") ?? "";
-    if (text) void invoke("session_paste", { id: sessionId, text });
+    const id = activeId();
+    if (text && id !== null) void invoke("session_paste", { id, text });
   });
 
   function flush(): void {
     const text = textarea.value;
     if (!text) return;
     textarea.value = "";
-    void invoke("session_write", { id: sessionId, text });
+    const id = activeId();
+    if (id !== null) void invoke("session_write", { id, text });
   }
 
-  // Focus stays on the textarea even when clicking the canvas.
-  canvas.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    textarea.focus();
-  });
   window.addEventListener("focus", () => textarea.focus());
   textarea.focus();
   return textarea;

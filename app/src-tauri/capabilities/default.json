@@ -3,5 +3,10 @@
   "identifier": "default",
   "description": "Permessi della finestra principale",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-set-title"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
+  ]
 }

@@ -22,12 +22,17 @@ export function kindOf(clicks: number): SelectionKind {
  * The selected text is read from the core on mouse release and kept aside:
  * the `copy` event is synchronous and cannot wait for an `invoke`.
  * No clipboard plugin needed, `clipboardData.setData` is enough.
+ *
+ * The textarea is shared by every tab: its listeners answer only while
+ * this canvas is the visible one, and `signal` removes them, with the ones
+ * on `window`, when the tab closes.
  */
 export function attachMouse(
   canvas: HTMLCanvasElement,
   textarea: HTMLTextAreaElement,
   renderer: Renderer,
   sessionId: number,
+  signal: AbortSignal,
 ): void {
   let selecting = false;
   let pending: Cell | null = null;
@@ -44,6 +49,9 @@ export function attachMouse(
   }
 
   canvas.addEventListener("mousedown", (e) => {
+    // Focus stays on the textarea even when clicking the canvas.
+    e.preventDefault();
+    textarea.focus();
     if (e.button !== 0) return;
     selecting = true;
     selectedText = null;
@@ -59,38 +67,58 @@ export function attachMouse(
 
   // The mouse can move many times per frame: only the latest position is
   // sent to the core, once per animation frame.
-  window.addEventListener("mousemove", (e) => {
-    if (!selecting) return;
-    pending = cellOf(e);
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(() => {
-      scheduled = false;
-      if (!pending) return;
-      const { row, col, side } = pending;
+  window.addEventListener(
+    "mousemove",
+    (e) => {
+      if (!selecting) return;
+      pending = cellOf(e);
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        if (!pending) return;
+        const { row, col, side } = pending;
+        pending = null;
+        void invoke("session_select_update", { id: sessionId, row, col, side });
+      });
+    },
+    { signal },
+  );
+
+  window.addEventListener(
+    "mouseup",
+    async (e) => {
+      if (!selecting || e.button !== 0) return;
+      selecting = false;
       pending = null;
-      void invoke("session_select_update", { id: sessionId, row, col, side });
-    });
-  });
+      selectedText = await invoke<string | null>("session_selection_text", { id: sessionId });
+    },
+    { signal },
+  );
 
-  window.addEventListener("mouseup", async (e) => {
-    if (!selecting || e.button !== 0) return;
-    selecting = false;
-    pending = null;
-    selectedText = await invoke<string | null>("session_selection_text", { id: sessionId });
-  });
-
-  textarea.addEventListener("copy", (e) => {
-    if (!selectedText) return;
-    e.preventDefault();
-    e.clipboardData?.setData("text/plain", selectedText);
-  });
+  textarea.addEventListener(
+    "copy",
+    (e) => {
+      if (canvas.hidden || !selectedText) return;
+      e.preventDefault();
+      e.clipboardData?.setData("text/plain", selectedText);
+    },
+    { signal },
+  );
 
   // Typing clears the selection in the core: the text kept aside is stale.
-  textarea.addEventListener("keydown", (e) => {
-    if (!e.metaKey) selectedText = null;
-  });
-  textarea.addEventListener("input", () => {
-    selectedText = null;
-  });
+  textarea.addEventListener(
+    "keydown",
+    (e) => {
+      if (!canvas.hidden && !e.metaKey) selectedText = null;
+    },
+    { signal },
+  );
+  textarea.addEventListener(
+    "input",
+    () => {
+      if (!canvas.hidden) selectedText = null;
+    },
+    { signal },
+  );
 }
