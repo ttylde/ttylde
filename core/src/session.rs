@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    emulator::{Emulator, SelectionKind, SelectionSide},
+    emulator::{Emulator, EmulatorEvent, SelectionKind, SelectionSide},
     error::Result,
     frame::Frame,
     input::{encode_key, encode_paste, Key, Mods},
@@ -14,11 +14,14 @@ use crate::{
     theme::Theme,
 };
 
-/// Serialized as `{ "type": "Frame", "data": {...} }` and `{ "type": "Exit" }`.
+/// Serialized as `{ "type": "Frame", "data": {...} }` and `{ "type": "Exit" } and ...`.
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(tag = "type", content = "data")]
 pub enum SessionEvent {
     Frame(Frame),
+    Title(String),
+    TitleReset,
+    Bell,
     Exit,
 }
 
@@ -41,6 +44,7 @@ impl Session {
     ) -> Result<Self> {
         let pty = Pty::spawn(cmd, cols, rows)?;
         let mut reader = pty.reader()?;
+        let writer = pty.writer();
         let emulator = Arc::new(Mutex::new(Emulator::new(
             cols as usize,
             rows as usize,
@@ -61,11 +65,26 @@ impl Session {
                         break;
                     }
                     Ok(n) => {
-                        let frame = {
+                        let (frame, events) = {
                             let mut emu = shared.lock().unwrap();
                             emu.feed(&buf[..n]);
-                            emu.frame()
+                            (emu.frame(), emu.take_events())
                         };
+
+                        for event in events {
+                            match event {
+                                EmulatorEvent::Write(bytes) => {
+                                    let _ = writer.write(&bytes);
+                                }
+                                EmulatorEvent::Title(title) => {
+                                    on_event_for_thread(SessionEvent::Title(title))
+                                }
+                                EmulatorEvent::ResetTitle => {
+                                    on_event_for_thread(SessionEvent::TitleReset)
+                                }
+                                EmulatorEvent::Bell => on_event_for_thread(SessionEvent::Bell),
+                            }
+                        }
 
                         if let Some(frame) = frame {
                             on_event_for_thread(SessionEvent::Frame(frame));
@@ -226,6 +245,7 @@ mod tests {
             {
                 SessionEvent::Frame(frame) => frames.push(frame),
                 SessionEvent::Exit => return frames,
+                _ => continue,
             }
         }
     }
@@ -238,8 +258,22 @@ mod tests {
                 .expect("no event within the timeout")
             {
                 SessionEvent::Frame(frame) if pred(&frame) => return frame,
-                SessionEvent::Frame(_) => continue,
                 SessionEvent::Exit => panic!("the session exited before the expected frame"),
+                _ => continue,
+            }
+        }
+    }
+
+    /// Waits for the first event equal to `expected`, discarding the others.
+    fn wait_for_event(rx: &mpsc::Receiver<SessionEvent>, expected: SessionEvent) {
+        loop {
+            match rx
+                .recv_timeout(TIMEOUT)
+                .expect("no event within the timeout")
+            {
+                event if event == expected => return,
+                SessionEvent::Exit => panic!("the session exited before the expected event"),
+                _ => continue,
             }
         }
     }
@@ -425,5 +459,29 @@ mod tests {
         session.key(Key::Char('a'), Mods::default()).unwrap();
 
         assert_eq!(session.selection_text(), None);
+    }
+    // Title and bell reach the callback as their own events.
+    #[test]
+    fn title_and_bell_arrive_as_events() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args(["-c", r"printf '\033]0;ciao\007\007'; read x"]);
+        let (_session, rx) = spawn_with_channel(cmd);
+
+        wait_for_event(&rx, SessionEvent::Title("ciao".into()));
+        wait_for_event(&rx, SessionEvent::Bell);
+    }
+
+    // The shell asks for the cursor position and prints `ok` only once the
+    // six bytes of the reply (`ESC [ 1 ; 1 R`) come back through the PTY.
+    #[test]
+    fn terminal_queries_are_answered_on_the_pty() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args([
+            "-c",
+            r"stty raw -echo; printf '\033[6n'; dd bs=1 count=6 >/dev/null 2>&1; echo ok; read x",
+        ]);
+        let (_session, rx) = spawn_with_channel(cmd);
+
+        wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "ok"));
     }
 }

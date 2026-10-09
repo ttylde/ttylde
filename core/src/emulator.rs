@@ -4,6 +4,7 @@
 //! unit tests in `tests`. All of them extend `Emulator`.
 
 mod color;
+mod listener;
 mod selection;
 #[cfg(test)]
 mod tests;
@@ -11,7 +12,7 @@ mod tests;
 use std::mem;
 
 use alacritty_terminal::{
-    event::VoidListener,
+    event::Event,
     grid::{Dimensions, Scroll},
     index::{Column, Line, Point},
     selection::SelectionRange,
@@ -26,7 +27,18 @@ use crate::{
     theme::Theme,
 };
 
+use listener::InternalEventListener;
+
 pub use selection::{SelectionKind, SelectionSide};
+
+/// What the terminal asks of whoever drives it, collected while parsing.
+#[derive(Debug, PartialEq)]
+pub enum EmulatorEvent {
+    Title(String),
+    ResetTitle,
+    Bell,
+    Write(Vec<u8>),
+}
 
 struct Size {
     cols: usize,
@@ -50,7 +62,8 @@ impl Dimensions for Size {
 
 pub struct Emulator {
     dirty: bool,
-    term: Term<VoidListener>,
+    term: Term<InternalEventListener>,
+    events: InternalEventListener,
     parser: Processor,
     theme: Theme,
     force_full: bool,
@@ -66,6 +79,7 @@ impl Emulator {
             ..Default::default()
         };
 
+        let events = InternalEventListener::default();
         let term = Term::new(
             config,
             &Size {
@@ -73,13 +87,14 @@ impl Emulator {
                 rows,
                 history,
             },
-            VoidListener,
+            events.clone(),
         );
         let parser = Processor::new();
 
         Emulator {
             dirty: false,
             term,
+            events,
             parser,
             theme,
             force_full: true,
@@ -314,5 +329,25 @@ impl Emulator {
             self.term.scroll_display(Scroll::Bottom);
             self.dirty = true;
         }
+    }
+
+    /// Drains the events produced by the bytes fed so far. Color queries
+    /// are answered here, since the reply depends on the theme.
+    pub fn take_events(&self) -> Vec<EmulatorEvent> {
+        self.events
+            .take()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::Title(title) => Some(EmulatorEvent::Title(title)),
+                Event::ResetTitle => Some(EmulatorEvent::ResetTitle),
+                Event::Bell => Some(EmulatorEvent::Bell),
+                Event::PtyWrite(text) => Some(EmulatorEvent::Write(text.into_bytes())),
+                Event::ColorRequest(index, format) => {
+                    let rgb = color::u32_to_rgb(self.resolve_index(index));
+                    Some(EmulatorEvent::Write(format(rgb).into_bytes()))
+                }
+                _ => None,
+            })
+            .collect()
     }
 }

@@ -500,3 +500,62 @@ fn frame_carries_the_background_color() {
     emulator.feed(b"\x1b]11;#102030\x07");
     assert_eq!(emulator.frame().unwrap().background, 0x102030);
 }
+
+// OSC 0 sets the window title.
+#[test]
+fn title_changes_become_events() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]0;ciao\x07");
+
+    assert_eq!(
+        emulator.take_events(),
+        vec![EmulatorEvent::Title("ciao".into())]
+    );
+}
+
+#[test]
+fn bell_becomes_an_event() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x07");
+
+    assert_eq!(emulator.take_events(), vec![EmulatorEvent::Bell]);
+}
+
+// Device Attributes is a query: the answer must go back to the PTY.
+#[test]
+fn device_attributes_query_is_answered() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b[c");
+
+    assert_eq!(
+        emulator.take_events(),
+        vec![EmulatorEvent::Write(b"\x1b[?6c".to_vec())]
+    );
+}
+
+// OSC 11 asks for the background: the reply carries the theme color.
+#[test]
+fn background_color_query_is_answered_with_the_theme() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]11;?\x07");
+
+    assert_eq!(
+        emulator.take_events(),
+        vec![EmulatorEvent::Write(
+            b"\x1b]11;rgb:1616/1616/1a1a\x07".to_vec()
+        )]
+    );
+}
+
+// Events are handed over once; plain output produces none.
+#[test]
+fn events_are_drained_once() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x07");
+
+    assert_eq!(emulator.take_events().len(), 1);
+    assert!(emulator.take_events().is_empty());
+
+    emulator.feed(b"hello");
+    assert!(emulator.take_events().is_empty());
+}

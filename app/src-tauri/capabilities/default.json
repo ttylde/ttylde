@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permessi della finestra principale",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-set-title"]
 }
