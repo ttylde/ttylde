@@ -23,6 +23,8 @@ export type Frame = {
   cursor: Cursor | null;
   offset: number;
   history: number;
+  /** The program asked for mouse events. */
+  mouse: boolean;
 };
 
 export type SessionEvent =

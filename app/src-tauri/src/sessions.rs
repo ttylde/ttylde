@@ -12,7 +12,7 @@ use portable_pty::CommandBuilder;
 use tauri::ipc::Channel;
 use tauri::State;
 use ttylde_core::emulator::{SelectionKind, SelectionSide};
-use ttylde_core::input::{Key, Mods};
+use ttylde_core::input::{Key, Mods, MouseEvent};
 use ttylde_core::session::{Session, SessionEvent};
 use ttylde_core::theme::Theme;
 
@@ -114,6 +114,17 @@ pub fn session_resize(
 ) -> Result<(), String> {
     state
         .with_session(id, |session| session.resize(cols, rows))?
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn session_mouse(
+    state: State<'_, Sessions>,
+    id: u32,
+    event: MouseEvent,
+) -> Result<bool, String> {
+    state
+        .with_session(id, |session| session.mouse(event))?
         .map_err(|e| e.to_string())
 }
 

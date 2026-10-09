@@ -9,7 +9,7 @@ use crate::{
     emulator::{Emulator, EmulatorEvent, SelectionKind, SelectionSide},
     error::Result,
     frame::Frame,
-    input::{encode_key, encode_paste, Key, Mods},
+    input::{encode_key, encode_mouse, encode_paste, Key, Mods, MouseEvent},
     pty::Pty,
     theme::Theme,
 };
@@ -193,6 +193,16 @@ impl Session {
         self.emulator.lock().unwrap().selection_text()
     }
 
+    /// Reports a mouse event to the program, if it asked for it.
+    /// Returns `false` if nothing was written.
+    pub fn mouse(&mut self, event: MouseEvent) -> io::Result<bool> {
+        let mode = self.emulator.lock().unwrap().input_mode();
+        match encode_mouse(event, mode) {
+            Some(bytes) => self.pty.write(&bytes).map(|_| true),
+            None => Ok(false),
+        }
+    }
+
     /// Sends the callback the frame produced by a local change (scroll,
     /// selection) that the reader thread would never see.
     fn emit_frame(&self) {
@@ -214,6 +224,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::input::{MouseAction, MouseButton};
 
     const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -475,5 +486,42 @@ mod tests {
         let (_session, rx) = spawn_with_channel(cmd);
 
         wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "ok"));
+    }
+
+    fn left_press() -> MouseEvent {
+        MouseEvent {
+            action: MouseAction::Press,
+            button: Some(MouseButton::Left),
+            row: 0,
+            col: 0,
+            mods: Mods::default(),
+        }
+    }
+
+    // The shell turns mouse reporting on, which the frame tells the
+    // frontend, and prints `ok` only once the nine bytes of the click
+    // (`ESC [ < 0 ; 1 ; 1 M`) arrive through the PTY.
+    #[test]
+    fn mouse_events_reach_a_program_that_asked_for_them() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args([
+            "-c",
+            r"stty raw -echo; printf '\033[?1000h\033[?1006h'; dd bs=1 count=9 >/dev/null 2>&1; echo ok; read x",
+        ]);
+        let (mut session, rx) = spawn_with_channel(cmd);
+
+        wait_for_frame(&rx, |f| f.mouse);
+        assert!(session.mouse(left_press()).unwrap());
+        wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "ok"));
+    }
+
+    // Without a request the mouse belongs to the terminal: nothing is written.
+    #[test]
+    fn mouse_events_are_dropped_without_a_request() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args(["-c", "read x"]);
+        let (mut session, _rx) = spawn_with_channel(cmd);
+
+        assert!(!session.mouse(left_press()).unwrap());
     }
 }

@@ -11,6 +11,7 @@ pub struct Frame {
     pub cursor: Option<Cursor>,
     pub offset: u32,
     pub history: u32,
+    pub mouse: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { cellAtPoint } from "./geometry";
-import { kindOf } from "./mouse";
+import { buttonOf, kindOf } from "./mouse";
 
 const metrics = { cellWidth: 10, cellHeight: 20, ascent: 15 };
 
@@ -33,5 +33,16 @@ describe("kindOf", () => {
     expect(kindOf(2)).toBe("Word");
     expect(kindOf(3)).toBe("Line");
     expect(kindOf(5)).toBe("Line");
+  });
+});
+
+describe("buttonOf", () => {
+  // The DOM numbers the buttons left, middle, right; the rest (back,
+  // forward) have no meaning for the terminal.
+  test("names the three main buttons", () => {
+    expect(buttonOf(0)).toBe("Left");
+    expect(buttonOf(1)).toBe("Middle");
+    expect(buttonOf(2)).toBe("Right");
+    expect(buttonOf(3)).toBeNull();
   });
 });

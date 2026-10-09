@@ -3,7 +3,6 @@
 //! The frontend sends raw events (which key, which modifiers); here we decide
 //! which bytes to write to the PTY. The rules follow xterm, the de facto
 //! standard programs expect with `TERM=xterm-256color`.
-
 use serde::Deserialize;
 
 /// A pressed key. `Char` is only used for Ctrl or Alt combinations: plain
@@ -38,6 +37,43 @@ pub struct Mods {
     pub ctrl: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum MouseButton {
+    Left,
+    Middle,
+    Right,
+    WheelUp,
+    WheelDown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum MouseAction {
+    Press,
+    Release,
+    Move,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub struct MouseEvent {
+    pub action: MouseAction,
+    /// `None` only for a `Move` with no button held.
+    pub button: Option<MouseButton>,
+    pub row: u16,
+    pub col: u16,
+    #[serde(default)]
+    pub mods: Mods,
+}
+
+/// Which mouse events the program asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MouseTracking {
+    #[default]
+    Off,
+    Click,
+    Drag,
+    Motion,
+}
+
 impl Mods {
     /// The modifier parameter of xterm sequences: 1 plus the bits
     /// Shift (1), Alt (2), Ctrl (4). It is 1 without modifiers.
@@ -59,6 +95,8 @@ pub struct InputMode {
     pub bracketed_paste: bool,
     pub alt_screen: bool,
     pub alternate_scroll: bool,
+    pub mouse: MouseTracking,
+    pub sgr_mouse: bool,
 }
 
 const ESC: u8 = 0x1b;
@@ -105,7 +143,84 @@ pub fn encode_key(key: Key, mods: Mods, mode: InputMode) -> Option<Vec<u8>> {
             with_alt_prefix(mods, c.encode_utf8(&mut buf).as_bytes().to_vec())
         }
     };
+
     Some(bytes)
+}
+
+/// Encodes a mouse event. `None` if the program did not ask for it, or
+/// the position does not fit the format in use.
+pub fn encode_mouse(event: MouseEvent, mode: InputMode) -> Option<Vec<u8>> {
+    let wanted = match mode.mouse {
+        MouseTracking::Off => false,
+        MouseTracking::Click => event.action != MouseAction::Move,
+        MouseTracking::Drag => event.action != MouseAction::Move || event.button.is_some(),
+        MouseTracking::Motion => true,
+    };
+
+    if !wanted {
+        return None;
+    }
+
+    let is_wheel = matches!(
+        event.button,
+        Some(MouseButton::WheelUp | MouseButton::WheelDown)
+    );
+    if is_wheel && event.action != MouseAction::Press {
+        return None;
+    }
+
+    let mut code: u8 = match event.button {
+        Some(MouseButton::Left) => 0,
+        Some(MouseButton::Middle) => 1,
+        Some(MouseButton::Right) => 2,
+        Some(MouseButton::WheelUp) => 64,
+        Some(MouseButton::WheelDown) => 65,
+        None => 3,
+    };
+
+    if event.action == MouseAction::Move {
+        code += 32;
+    }
+    if event.mods.shift {
+        code += 4;
+    }
+    if event.mods.alt {
+        code += 8;
+    }
+    if event.mods.ctrl {
+        code += 16;
+    }
+
+    let col = event.col + 1;
+    let row = event.row + 1;
+
+    if mode.sgr_mouse {
+        // SGR
+        let end = if event.action == MouseAction::Release {
+            'm'
+        } else {
+            'M'
+        };
+
+        Some(format!("\x1b[<{code};{col};{row}{end}").into_bytes())
+    } else {
+        // X10
+        if event.action == MouseAction::Release {
+            code |= 3;
+        }
+        if col > 223 || row > 223 {
+            return None;
+        }
+
+        Some(vec![
+            ESC,
+            b'[',
+            b'M',
+            code + 32,
+            col as u8 + 32,
+            row as u8 + 32,
+        ])
+    }
 }
 
 /// Arrows and Home/End: `ESC [ x`, or `ESC O x` in application mode;
@@ -187,6 +302,8 @@ mod tests {
         bracketed_paste: false,
         alt_screen: false,
         alternate_scroll: false,
+        mouse: MouseTracking::Off,
+        sgr_mouse: false,
     };
 
     fn enc(key: Key, mods: Mods) -> Vec<u8> {
@@ -252,5 +369,130 @@ mod tests {
             ..plain
         };
         assert_eq!(encode_paste("a\nb", bracketed), b"\x1b[200~a\nb\x1b[201~");
+    }
+
+    fn mouse(action: MouseAction, button: Option<MouseButton>, row: u16, col: u16) -> MouseEvent {
+        MouseEvent {
+            action,
+            button,
+            row,
+            col,
+            mods: NONE,
+        }
+    }
+
+    fn tracking(mouse: MouseTracking, sgr_mouse: bool) -> InputMode {
+        InputMode {
+            mouse,
+            sgr_mouse,
+            ..InputMode::default()
+        }
+    }
+
+    const LEFT: Option<MouseButton> = Some(MouseButton::Left);
+
+    // SGR is text: button, then column and row counted from one. The final
+    // letter tells press from release, and the release names its button.
+    #[test]
+    fn sgr_reports_press_and_release() {
+        let mode = tracking(MouseTracking::Click, true);
+        let press = mouse(MouseAction::Press, LEFT, 4, 9);
+        let release = mouse(MouseAction::Release, Some(MouseButton::Right), 4, 9);
+        assert_eq!(encode_mouse(press, mode).unwrap(), b"\x1b[<0;10;5M");
+        assert_eq!(encode_mouse(release, mode).unwrap(), b"\x1b[<2;10;5m");
+    }
+
+    // X10 is three raw bytes offset by 32, and a release does not say
+    // which button went up.
+    #[test]
+    fn x10_reports_press_and_release() {
+        let mode = tracking(MouseTracking::Click, false);
+        let press = mouse(MouseAction::Press, Some(MouseButton::Middle), 0, 0);
+        let release = mouse(MouseAction::Release, Some(MouseButton::Middle), 0, 0);
+        assert_eq!(
+            encode_mouse(press, mode).unwrap(),
+            [ESC, b'[', b'M', 33, 33, 33]
+        );
+        assert_eq!(
+            encode_mouse(release, mode).unwrap(),
+            [ESC, b'[', b'M', 35, 33, 33]
+        );
+    }
+
+    // One byte per coordinate: past 223 the position cannot be written.
+    #[test]
+    fn x10_gives_up_on_far_cells() {
+        let mode = tracking(MouseTracking::Click, false);
+        let edge = mouse(MouseAction::Press, LEFT, 222, 222);
+        let beyond = mouse(MouseAction::Press, LEFT, 0, 223);
+        assert_eq!(
+            encode_mouse(edge, mode).unwrap(),
+            [ESC, b'[', b'M', 32, 255, 255]
+        );
+        assert_eq!(encode_mouse(beyond, mode), None);
+        assert!(encode_mouse(beyond, tracking(MouseTracking::Click, true)).is_some());
+    }
+
+    // Each tracking level adds events to the one before.
+    #[test]
+    fn tracking_decides_which_events_pass() {
+        let press = mouse(MouseAction::Press, LEFT, 0, 0);
+        let drag = mouse(MouseAction::Move, LEFT, 0, 0);
+        let hover = mouse(MouseAction::Move, None, 0, 0);
+        let passes = |event, level| encode_mouse(event, tracking(level, true)).is_some();
+
+        assert!(!passes(press, MouseTracking::Off));
+        assert!(passes(press, MouseTracking::Click));
+        assert!(!passes(drag, MouseTracking::Click));
+        assert!(passes(drag, MouseTracking::Drag));
+        assert!(!passes(hover, MouseTracking::Drag));
+        assert!(passes(hover, MouseTracking::Motion));
+    }
+
+    // A move adds 32 to the button; without a button it counts as 3.
+    #[test]
+    fn moves_are_marked_in_the_button_code() {
+        let mode = tracking(MouseTracking::Motion, true);
+        let drag = mouse(MouseAction::Move, LEFT, 1, 2);
+        let hover = mouse(MouseAction::Move, None, 1, 2);
+        assert_eq!(encode_mouse(drag, mode).unwrap(), b"\x1b[<32;3;2M");
+        assert_eq!(encode_mouse(hover, mode).unwrap(), b"\x1b[<35;3;2M");
+    }
+
+    // The wheel is a button that is only ever pressed.
+    #[test]
+    fn wheel_is_reported_as_a_press() {
+        let mode = tracking(MouseTracking::Click, true);
+        let up = mouse(MouseAction::Press, Some(MouseButton::WheelUp), 0, 0);
+        let down = mouse(MouseAction::Press, Some(MouseButton::WheelDown), 0, 0);
+        let release = mouse(MouseAction::Release, Some(MouseButton::WheelUp), 0, 0);
+        assert_eq!(encode_mouse(up, mode).unwrap(), b"\x1b[<64;1;1M");
+        assert_eq!(encode_mouse(down, mode).unwrap(), b"\x1b[<65;1;1M");
+        assert_eq!(encode_mouse(release, mode), None);
+    }
+
+    // Shift, Alt and Ctrl add 4, 8 and 16; in X10 they survive a release.
+    #[test]
+    fn modifiers_are_added_to_the_button_code() {
+        let all = Mods {
+            shift: true,
+            alt: true,
+            ctrl: true,
+        };
+        let press = MouseEvent {
+            mods: all,
+            ..mouse(MouseAction::Press, LEFT, 0, 0)
+        };
+        let release = MouseEvent {
+            mods: CTRL,
+            ..mouse(MouseAction::Release, LEFT, 0, 0)
+        };
+        let sgr = tracking(MouseTracking::Click, true);
+        let x10 = tracking(MouseTracking::Click, false);
+        assert_eq!(encode_mouse(press, sgr).unwrap(), b"\x1b[<28;1;1M");
+        assert_eq!(
+            encode_mouse(release, x10).unwrap(),
+            [ESC, b'[', b'M', 3 + 16 + 32, 33, 33]
+        );
     }
 }

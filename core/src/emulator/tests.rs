@@ -186,6 +186,28 @@ fn input_mode_follows_the_program() {
     assert!(mode.alt_screen);
 }
 
+// `CSI ? 1000 h` asks for clicks, 1002 adds drags, 1003 every move; each
+// replaces the one before. `CSI ? 1006 h` picks the SGR format.
+#[test]
+fn mouse_tracking_follows_the_program() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    let mode = emulator.input_mode();
+    assert_eq!(mode.mouse, MouseTracking::Off);
+    assert!(!mode.sgr_mouse);
+
+    emulator.feed(b"\x1b[?1000h\x1b[?1006h");
+    let mode = emulator.input_mode();
+    assert_eq!(mode.mouse, MouseTracking::Click);
+    assert!(mode.sgr_mouse);
+
+    emulator.feed(b"\x1b[?1002h");
+    assert_eq!(emulator.input_mode().mouse, MouseTracking::Drag);
+    emulator.feed(b"\x1b[?1003h");
+    assert_eq!(emulator.input_mode().mouse, MouseTracking::Motion);
+    emulator.feed(b"\x1b[?1003l");
+    assert_eq!(emulator.input_mode().mouse, MouseTracking::Off);
+}
+
 // Rows that scroll off the screen stay in the history, with negative indices.
 #[test]
 fn scrolled_out_lines_stay_in_history() {
