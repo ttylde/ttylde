@@ -5,6 +5,7 @@
 //! `Channel`.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use portable_pty::CommandBuilder;
@@ -20,16 +21,19 @@ const NO_SUCH_SESSION: &str = "no such session";
 /// Registry of open sessions, shared by the commands.
 #[derive(Default)]
 pub struct Sessions {
-    next_id: Mutex<u32>,
+    next_id: AtomicU32,
     open: Mutex<HashMap<u32, Session>>,
 }
 
 impl Sessions {
     fn allocate_id(&self) -> u32 {
-        let mut next = self.next_id.lock().unwrap();
-        let id = *next;
-        *next += 1;
-        id
+        self.next_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn with_session<R>(&self, id: u32, f: impl FnOnce(&mut Session) -> R) -> Result<R, String> {
+        let mut open = self.open.lock().unwrap();
+        let session = open.get_mut(&id).ok_or(NO_SUCH_SESSION)?;
+        Ok(f(session))
     }
 }
 
@@ -66,9 +70,9 @@ pub fn session_open(
 
 #[tauri::command]
 pub fn session_write(state: State<'_, Sessions>, id: u32, text: String) -> Result<(), String> {
-    let mut open = state.open.lock().unwrap();
-    let session = open.get_mut(&id).ok_or(NO_SUCH_SESSION)?;
-    session.write(text.as_bytes()).map_err(|e| e.to_string())
+    state
+        .with_session(id, |session| session.write(text.as_bytes()))?
+        .map_err(|e| e.to_string())
 }
 
 /// A special key or a combination: the core does the encoding.
@@ -80,25 +84,25 @@ pub fn session_key(
     key: Key,
     mods: Mods,
 ) -> Result<bool, String> {
-    let mut open = state.open.lock().unwrap();
-    let session = open.get_mut(&id).ok_or(NO_SUCH_SESSION)?;
-    session.key(key, mods).map_err(|e| e.to_string())
+    state
+        .with_session(id, |session| session.key(key, mods))?
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn session_paste(state: State<'_, Sessions>, id: u32, text: String) -> Result<(), String> {
-    let mut open = state.open.lock().unwrap();
-    let session = open.get_mut(&id).ok_or(NO_SUCH_SESSION)?;
-    session.paste(&text).map_err(|e| e.to_string())
+    state
+        .with_session(id, |session| session.paste(&text))?
+        .map_err(|e| e.to_string())
 }
 
 /// Mouse wheel: positive rows go up (back into the history). The core decides
 /// whether to move the view or, on the alternate screen, send arrow keys.
 #[tauri::command]
 pub fn session_scroll(state: State<'_, Sessions>, id: u32, delta: i32) -> Result<(), String> {
-    let mut open = state.open.lock().unwrap();
-    let session = open.get_mut(&id).ok_or(NO_SUCH_SESSION)?;
-    session.scroll(delta).map_err(|e| e.to_string())
+    state
+        .with_session(id, |session| session.scroll(delta))?
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -108,9 +112,9 @@ pub fn session_resize(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    let mut open = state.open.lock().unwrap();
-    let session = open.get_mut(&id).ok_or(NO_SUCH_SESSION)?;
-    session.resize(cols, rows).map_err(|e| e.to_string())
+    state
+        .with_session(id, |session| session.resize(cols, rows))?
+        .map_err(|e| e.to_string())
 }
 
 /// Start of a mouse selection. `row`/`col` are screen coordinates; `side`
@@ -124,10 +128,7 @@ pub fn session_select_start(
     side: SelectionSide,
     kind: SelectionKind,
 ) -> Result<(), String> {
-    let open = state.open.lock().unwrap();
-    let session = open.get(&id).ok_or(NO_SUCH_SESSION)?;
-    session.select_start(row, col, side, kind);
-    Ok(())
+    state.with_session(id, |session| session.select_start(row, col, side, kind))
 }
 
 #[tauri::command]
@@ -138,18 +139,12 @@ pub fn session_select_update(
     col: u16,
     side: SelectionSide,
 ) -> Result<(), String> {
-    let open = state.open.lock().unwrap();
-    let session = open.get(&id).ok_or(NO_SUCH_SESSION)?;
-    session.select_update(row, col, side);
-    Ok(())
+    state.with_session(id, |session| session.select_update(row, col, side))
 }
 
 #[tauri::command]
 pub fn session_select_clear(state: State<'_, Sessions>, id: u32) -> Result<(), String> {
-    let open = state.open.lock().unwrap();
-    let session = open.get(&id).ok_or(NO_SUCH_SESSION)?;
-    session.select_clear();
-    Ok(())
+    state.with_session(id, |session| session.select_clear())
 }
 
 /// The selected text, ready for the clipboard. `None` without a selection.
@@ -158,9 +153,7 @@ pub fn session_selection_text(
     state: State<'_, Sessions>,
     id: u32,
 ) -> Result<Option<String>, String> {
-    let open = state.open.lock().unwrap();
-    let session = open.get(&id).ok_or(NO_SUCH_SESSION)?;
-    Ok(session.selection_text())
+    state.with_session(id, |session| session.selection_text())
 }
 
 /// Removes the session from the registry: its `Drop` kills the shell.
