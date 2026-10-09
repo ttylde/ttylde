@@ -41,22 +41,22 @@ pub enum EmulatorEvent {
 }
 
 struct Size {
-    cols: usize,
-    rows: usize,
+    cols: u16,
+    rows: u16,
     history: usize,
 }
 
 impl Dimensions for Size {
     fn columns(&self) -> usize {
-        self.cols
+        usize::from(self.cols)
     }
 
     fn screen_lines(&self) -> usize {
-        self.rows
+        usize::from(self.rows)
     }
 
     fn total_lines(&self) -> usize {
-        self.rows + self.history
+        usize::from(self.rows) + self.history
     }
 }
 
@@ -73,7 +73,7 @@ pub struct Emulator {
 }
 
 impl Emulator {
-    pub fn new(cols: usize, rows: usize, theme: Theme, history: usize) -> Self {
+    pub fn new(cols: u16, rows: u16, theme: Theme, history: usize) -> Self {
         let config = Config {
             scrolling_history: history,
             ..Default::default()
@@ -133,7 +133,7 @@ impl Emulator {
         }
     }
 
-    pub fn resize(&mut self, cols: usize, rows: usize) {
+    pub fn resize(&mut self, cols: u16, rows: u16) {
         self.term.resize(Size {
             cols,
             rows,
