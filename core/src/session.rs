@@ -45,12 +45,7 @@ impl Session {
         let pty = Pty::spawn(cmd, cols, rows)?;
         let mut reader = pty.reader()?;
         let writer = pty.writer();
-        let emulator = Arc::new(Mutex::new(Emulator::new(
-            cols as usize,
-            rows as usize,
-            theme,
-            history,
-        )));
+        let emulator = Arc::new(Mutex::new(Emulator::new(cols, rows, theme, history)));
 
         let shared = Arc::clone(&emulator);
         let on_event = Arc::new(on_event);
@@ -139,10 +134,7 @@ impl Session {
 
     pub fn resize(&mut self, cols: u16, rows: u16) -> Result<()> {
         self.pty.resize(cols, rows)?;
-        self.emulator
-            .lock()
-            .unwrap()
-            .resize(cols as usize, rows as usize);
+        self.emulator.lock().unwrap().resize(cols, rows);
 
         Ok(())
     }
