@@ -8,6 +8,8 @@ pub enum Error {
     Pty(anyhow::Error),
     /// Reading from or writing to the PTY failed.
     Io(io::Error),
+    /// The config file is not valid; the message says where.
+    Config(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -17,6 +19,7 @@ impl fmt::Display for Error {
         match self {
             Error::Pty(e) => write!(f, "pty: {e}"),
             Error::Io(e) => write!(f, "io: {e}"),
+            Error::Config(s) => write!(f, "config: {s}"),
         }
     }
 }
@@ -26,6 +29,7 @@ impl std::error::Error for Error {
         match self {
             Error::Pty(e) => Some(e.as_ref()),
             Error::Io(e) => Some(e),
+            Error::Config(_) => None,
         }
     }
 }

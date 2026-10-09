@@ -1,28 +1,37 @@
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { attachKeyboard } from "./input";
 import { actionOf } from "./shortcuts";
 import { Tabs } from "./tabs";
+import type { Font } from "./types";
 
 const sidebar = document.querySelector<HTMLElement>("#sidebar")!;
 const list = document.querySelector<HTMLElement>("#tabs")!;
 const newTab = document.querySelector<HTMLElement>("#new-tab")!;
+const terminal = document.querySelector<HTMLElement>("#terminal")!;
 const screens = document.querySelector<HTMLElement>("#screens")!;
 const appWindow = getCurrentWindow();
 const DEFAULT_TITLE = "Ttylde";
 
+const font = await invoke<Font>("config_font");
 const keyboard = attachKeyboard(() => tabs.activeId());
 const tabs = new Tabs({
   list,
   screens,
   textarea: keyboard,
+  font,
   // The window follows the visible tab, and goes away with the last one.
+  // The frame around the canvas takes the background of what is drawn in it.
   onActiveChange(tab) {
     if (!tab) {
       void appWindow.close();
       return;
     }
     void appWindow.setTitle(tab.title ?? DEFAULT_TITLE);
+    if (tab.background !== null) {
+      terminal.style.background = `#${tab.background.toString(16).padStart(6, "0")}`;
+    }
     keyboard.focus();
   },
 });

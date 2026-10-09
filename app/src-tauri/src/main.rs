@@ -4,11 +4,22 @@
 mod sessions;
 
 use sessions::Sessions;
+use ttylde_core::config::{self, Config};
 
 fn main() {
+    let config = config::default_path()
+        .map(|path| Config::load(&path))
+        .unwrap_or_else(|| Ok(Config::default()))
+        .unwrap_or_else(|e| {
+            eprintln!("ttylde: {e}");
+            Config::default()
+        });
+
     tauri::Builder::default()
         .manage(Sessions::default())
+        .manage(config)
         .invoke_handler(tauri::generate_handler![
+            sessions::config_font,
             sessions::session_open,
             sessions::session_write,
             sessions::session_key,

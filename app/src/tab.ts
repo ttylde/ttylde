@@ -1,8 +1,8 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
 import { attachMouse } from "./mouse";
-import { Renderer } from "./renderer";
-import type { SessionEvent } from "./types";
+import { fontStack, Renderer } from "./renderer";
+import type { Font, SessionEvent } from "./types";
 
 /** One session with the canvas it is drawn on. */
 export type Tab = {
@@ -10,6 +10,8 @@ export type Tab = {
   id: number;
   /** Title set by the program, `null` when there is none. */
   title: string | null;
+  /** Background of the last frame, `null` before the first one. */
+  background: number | null;
   canvas: HTMLCanvasElement;
   renderer: Renderer;
   exited: boolean;
@@ -21,6 +23,7 @@ export type Tab = {
 
 export type TabHandlers = {
   onTitle(tab: Tab): void;
+  onBackground(tab: Tab): void;
   onExit(tab: Tab): void;
 };
 
@@ -34,6 +37,7 @@ export type TabHandlers = {
 export async function openTab(
   container: HTMLElement,
   textarea: HTMLTextAreaElement,
+  font: Font,
   handlers: TabHandlers,
 ): Promise<Tab> {
   const canvas = document.createElement("canvas");
@@ -41,11 +45,12 @@ export async function openTab(
   canvas.hidden = true;
   container.appendChild(canvas);
 
-  const renderer = new Renderer(canvas, "Menlo, Monaco, monospace", 13);
+  const renderer = new Renderer(canvas, fontStack(font.family), font.size);
   const size = renderer.fit(container.clientWidth, container.clientHeight);
   const tab: Tab = {
     id: -1,
     title: null,
+    background: null,
     canvas,
     renderer,
     exited: false,
@@ -59,6 +64,10 @@ export async function openTab(
       case "Frame":
         tab.mouse = event.data.mouse;
         renderer.apply(event.data);
+        if (event.data.background !== tab.background) {
+          tab.background = event.data.background;
+          handlers.onBackground(tab);
+        }
         break;
       case "Title":
         tab.title = event.data;
