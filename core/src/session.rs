@@ -345,7 +345,7 @@ mod tests {
         let (mut session, rx) = spawn_with_channel(cmd);
 
         // wait for `seq` to finish: the last printed row is "30"
-        wait_for_frame(&rx, |f| contains_text(&[f.clone()], "30"));
+        wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "30"));
 
         session.scroll(5).unwrap();
         let scrolled = wait_for_frame(&rx, |f| f.offset > 0);
@@ -399,7 +399,7 @@ mod tests {
         let mut cmd = CommandBuilder::new("sh");
         cmd.args(["-c", "echo foo bar; read x"]);
         let (session, rx) = spawn_with_channel(cmd);
-        wait_for_frame(&rx, |f| contains_text(&[f.clone()], "foo bar"));
+        wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "foo bar"));
 
         session.select_start(0, 0, SelectionSide::Left, SelectionKind::Simple);
         session.select_update(0, 2, SelectionSide::Right);
@@ -421,7 +421,7 @@ mod tests {
         let mut cmd = CommandBuilder::new("sh");
         cmd.args(["-c", "echo foo; read x"]);
         let (session, rx) = spawn_with_channel(cmd);
-        wait_for_frame(&rx, |f| contains_text(&[f.clone()], "foo"));
+        wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "foo"));
 
         session.select_start(0, 0, SelectionSide::Left, SelectionKind::Line);
         wait_for_frame(&rx, |f| f.lines.iter().any(|l| l.row == 0));
@@ -443,7 +443,7 @@ mod tests {
         let mut cmd = CommandBuilder::new("sh");
         cmd.args(["-c", "echo foo; read x"]);
         let (mut session, rx) = spawn_with_channel(cmd);
-        wait_for_frame(&rx, |f| contains_text(&[f.clone()], "foo"));
+        wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "foo"));
 
         session.select_start(0, 0, SelectionSide::Left, SelectionKind::Line);
         assert!(session.selection_text().is_some());
