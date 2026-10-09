@@ -8,6 +8,14 @@ pub(super) fn rgb_to_u32(rgb: Rgb) -> u32 {
     (u32::from(rgb.r) << 16) | (u32::from(rgb.g) << 8) | u32::from(rgb.b)
 }
 
+pub(super) fn u32_to_rgb(color: u32) -> Rgb {
+    Rgb {
+        r: (color >> 16) as u8,
+        g: (color >> 8) as u8,
+        b: color as u8,
+    }
+}
+
 impl Emulator {
     /// A terminal color as `0xRRGGBB`. Runtime overrides (OSC 4/10/11)
     /// take precedence over the theme.
@@ -17,9 +25,15 @@ impl Emulator {
             Color::Indexed(i) => i as usize,
             Color::Named(named) => named as usize,
         };
+
+        self.resolve_index(index)
+    }
+
+    pub(super) fn resolve_index(&self, index: usize) -> u32 {
         if let Some(rgb) = self.term.colors()[index] {
             return rgb_to_u32(rgb);
         }
+
         match index {
             0..=255 => self.theme.color(index as u8),
             256 | 267 => self.theme.foreground,
