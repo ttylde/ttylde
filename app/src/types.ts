@@ -27,6 +27,9 @@ export type Frame = {
   mouse: boolean;
 };
 
+/** Mirror of `Font` in core/src/config.rs. */
+export type Font = { family: string; size: number };
+
 export type SessionEvent =
   | { type: "Frame"; data: Frame }
   | { type: "Title"; data: string }

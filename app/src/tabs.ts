@@ -1,4 +1,5 @@
 import { closeTab, openTab, resizeTab, type Tab } from "./tab";
+import type { Font } from "./types";
 
 /** Shown in the sidebar for a tab whose program has set no title. */
 const UNTITLED = "shell";
@@ -11,7 +12,9 @@ export type TabsOptions = {
   /** Where the canvases go; its size is the size of every tab. */
   screens: HTMLElement;
   textarea: HTMLTextAreaElement;
-  /** The active tab or its title changed. `null`: no tab is left. */
+  /** Font of every tab, from the config file. */
+  font: Font;
+  /** The active tab, its title or its background changed. `null`: no tab is left. */
   onActiveChange(tab: Tab | null): void;
 };
 
@@ -32,9 +35,12 @@ export class Tabs {
 
   /** Opens a tab at the end of the list and shows it. */
   async open(): Promise<void> {
-    const { list, screens, textarea } = this.options;
-    const tab = await openTab(screens, textarea, {
+    const { list, screens, textarea, font } = this.options;
+    const tab = await openTab(screens, textarea, font, {
       onTitle: (tab) => this.retitle(tab),
+      onBackground: (tab) => {
+        if (tab === this.active) this.options.onActiveChange(tab);
+      },
       onExit: (tab) => this.close(tab),
     });
     // The shell can die before `session_open` returns.

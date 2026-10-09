@@ -4,6 +4,15 @@ import { type Cursor, type Frame, type Segment, SegmentFlags } from "./types";
 // (background and cursor included) come already resolved from the core.
 const INITIAL_BG = 0x16161a;
 
+/**
+ * The CSS font family for a configured font: the name quoted, followed by
+ * the fonts to fall back on when it is not installed.
+ */
+export function fontStack(family: string): string {
+  const name = family.replace(/["\\]/g, "\\$&");
+  return `"${name}", Menlo, Monaco, monospace`;
+}
+
 export type Metrics = { cellWidth: number; cellHeight: number; ascent: number };
 
 /**

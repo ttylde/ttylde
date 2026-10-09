@@ -11,10 +11,10 @@ use std::sync::Mutex;
 use portable_pty::CommandBuilder;
 use tauri::ipc::Channel;
 use tauri::State;
+use ttylde_core::config::{Config, Font};
 use ttylde_core::emulator::{SelectionKind, SelectionSide};
 use ttylde_core::input::{Key, Mods, MouseEvent};
 use ttylde_core::session::{Session, SessionEvent};
-use ttylde_core::theme::Theme;
 
 const NO_SUCH_SESSION: &str = "no such session";
 
@@ -40,6 +40,7 @@ impl Sessions {
 #[tauri::command]
 pub fn session_open(
     state: State<'_, Sessions>,
+    config: State<'_, Config>,
     cols: u16,
     rows: u16,
     on_event: Channel<SessionEvent>,
@@ -54,7 +55,7 @@ pub fn session_open(
         cmd,
         cols,
         rows,
-        Theme::default(),
+        config.theme.clone(),
         10_000,
         // If the webview is gone the send fails: nothing to do about it.
         Box::new(move |event| {
@@ -171,4 +172,10 @@ pub fn session_selection_text(
 #[tauri::command]
 pub fn session_close(state: State<'_, Sessions>, id: u32) {
     state.open.lock().unwrap().remove(&id);
+}
+
+/// Font family and size from the config file, for the renderer.
+#[tauri::command]
+pub fn config_font(config: State<'_, Config>) -> Font {
+    config.font.clone()
 }

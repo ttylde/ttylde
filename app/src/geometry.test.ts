@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { cellAtPoint } from "./geometry";
 import { buttonOf, kindOf } from "./mouse";
+import { fontStack } from "./renderer";
 
 const metrics = { cellWidth: 10, cellHeight: 20, ascent: 15 };
 
@@ -44,5 +45,18 @@ describe("buttonOf", () => {
     expect(buttonOf(1)).toBe("Middle");
     expect(buttonOf(2)).toBe("Right");
     expect(buttonOf(3)).toBeNull();
+  });
+});
+
+describe("fontStack", () => {
+  // The name is quoted, so spaces are fine, and falls back to fonts that
+  // are always there.
+  test("quotes the family and adds fallbacks", () => {
+    expect(fontStack("JetBrains Mono")).toBe('"JetBrains Mono", Menlo, Monaco, monospace');
+  });
+
+  // A quote in the name must not end the string early.
+  test("escapes quotes and backslashes", () => {
+    expect(fontStack('a"b\\c')).toBe('"a\\"b\\\\c", Menlo, Monaco, monospace');
   });
 });
