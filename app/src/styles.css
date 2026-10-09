@@ -3,25 +3,145 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #16161a;
-  color: #d8d8d2;
-  font-family: Menlo, monospace;
+  background: #2b3440;
+  color: #dfe5ea;
+  font-family: system-ui, -apple-system, sans-serif;
+  user-select: none;
 }
 
-#screen {
+body {
+  display: flex;
+}
+
+#sidebar {
+  width: 240px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 0 10px 12px;
+}
+
+/* Room for the traffic lights, which the system draws over the page. */
+#titlebar {
+  height: 44px;
+  flex: none;
+}
+
+#tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tab,
+#new-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: default;
+}
+
+.tab:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tab.active {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+.tab-close {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: #9fb0bf;
+  font-size: 13px;
+  line-height: 1;
+  visibility: hidden;
+}
+
+.tab:hover .tab-close {
+  visibility: visible;
+}
+
+.tab-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+#new-tab {
+  margin-top: 1px;
+  color: #9fb0bf;
+}
+
+#new-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+#new-tab .plus {
+  width: 16px;
+  text-align: center;
+}
+
+#stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  box-sizing: border-box;
+  padding: 12px 12px 12px 0;
+}
+
+#terminal {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #16161a;
+}
+
+/* The canvases are sized to this box and stacked in its corner. */
+#screens {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: block;
 }
 
-#screen.bell {
-  filter: brightness(1.6);
+.screen[hidden] {
+  display: none;
 }
 
-#notice {
-  position: fixed;
-  inset: auto 0 0 0;
-  padding: 8px 12px;
-  font-size: 12px;
-  background: #26262c;
+.screen.bell {
+  filter: brightness(1.6);
 }
 
 /* Off-screen but focusable: it receives the keyboard instead of the canvas. */

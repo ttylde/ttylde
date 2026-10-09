@@ -1,0 +1,132 @@
+import { Channel, invoke } from "@tauri-apps/api/core";
+
+import { attachMouse } from "./mouse";
+import { Renderer } from "./renderer";
+import type { SessionEvent } from "./types";
+
+/** One session with the canvas it is drawn on. */
+export type Tab = {
+  /** Session id in the core; -1 until the session is open. */
+  id: number;
+  /** Title set by the program, `null` when there is none. */
+  title: string | null;
+  canvas: HTMLCanvasElement;
+  renderer: Renderer;
+  exited: boolean;
+  /** Removes the listeners the tab registered outside its canvas. */
+  abort: AbortController;
+};
+
+export type TabHandlers = {
+  onTitle(tab: Tab): void;
+  onExit(tab: Tab): void;
+};
+
+/**
+ * Opens a session and a canvas for it inside `container`.
+ *
+ * Every tab keeps its own canvas and renderer: a tab in the background
+ * goes on receiving frames, so showing it again is only a matter of
+ * unhiding the canvas.
+ */
+export async function openTab(
+  container: HTMLElement,
+  textarea: HTMLTextAreaElement,
+  handlers: TabHandlers,
+): Promise<Tab> {
+  const canvas = document.createElement("canvas");
+  canvas.className = "screen";
+  canvas.hidden = true;
+  container.appendChild(canvas);
+
+  const renderer = new Renderer(canvas, "Menlo, Monaco, monospace", 13);
+  const size = renderer.fit(container.clientWidth, container.clientHeight);
+  const tab: Tab = {
+    id: -1,
+    title: null,
+    canvas,
+    renderer,
+    exited: false,
+    abort: new AbortController(),
+  };
+
+  const onEvent = new Channel<SessionEvent>();
+  onEvent.onmessage = (event) => {
+    switch (event.type) {
+      case "Frame":
+        renderer.apply(event.data);
+        break;
+      case "Title":
+        tab.title = event.data;
+        handlers.onTitle(tab);
+        break;
+      case "TitleReset":
+        tab.title = null;
+        handlers.onTitle(tab);
+        break;
+      case "Bell":
+        flashBell(canvas);
+        break;
+      case "Exit":
+        tab.exited = true;
+        handlers.onExit(tab);
+        break;
+    }
+  };
+
+  try {
+    tab.id = await invoke<number>("session_open", { ...size, onEvent });
+  } catch (error) {
+    canvas.remove();
+    throw error;
+  }
+  attachMouse(canvas, textarea, renderer, tab.id, tab.abort.signal);
+  attachWheel(tab);
+  return tab;
+}
+
+/** Closes the session and removes everything `openTab` created. */
+export function closeTab(tab: Tab): void {
+  tab.abort.abort();
+  tab.canvas.remove();
+  if (tab.id >= 0) void invoke("session_close", { id: tab.id });
+}
+
+/** Refits the canvas to `width` x `height` CSS pixels and resizes the session. */
+export function resizeTab(tab: Tab, width: number, height: number): void {
+  const { cols, rows } = tab.renderer.fit(width, height);
+  void invoke("session_resize", { id: tab.id, cols, rows });
+}
+
+// Visual bell: the screen brightens for a moment. A bell that rings while
+// the flash is on restarts it.
+const bellTimers = new WeakMap<HTMLCanvasElement, number>();
+function flashBell(canvas: HTMLCanvasElement): void {
+  canvas.classList.add("bell");
+  window.clearTimeout(bellTimers.get(canvas));
+  bellTimers.set(
+    canvas,
+    window.setTimeout(() => canvas.classList.remove("bell"), 120),
+  );
+}
+
+// The wheel arrives in pixels (fractional on a trackpad): we accumulate and
+// send the core whole rows only. deltaY > 0 means "down", which for the core
+// is a negative delta.
+function attachWheel(tab: Tab): void {
+  let remainder = 0;
+  tab.canvas.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const pixelsPerLine =
+        e.deltaMode === WheelEvent.DOM_DELTA_LINE ? 1 : tab.renderer.cellHeightCss();
+      remainder += e.deltaY / pixelsPerLine;
+      const lines = Math.trunc(remainder);
+      if (lines === 0) return;
+      remainder -= lines;
+      void invoke("session_scroll", { id: tab.id, delta: -lines });
+    },
+    { passive: false },
+  );
+}

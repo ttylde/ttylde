@@ -7,8 +7,14 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <canvas id="screen"></canvas>
-    <div id="notice" hidden></div>
+    <aside id="sidebar" data-tauri-drag-region>
+      <div id="titlebar" data-tauri-drag-region></div>
+      <div id="tabs"></div>
+      <div id="new-tab"><span class="plus">+</span>New tab</div>
+    </aside>
+    <main id="stage" data-tauri-drag-region>
+      <div id="terminal"><div id="screens"></div></div>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
