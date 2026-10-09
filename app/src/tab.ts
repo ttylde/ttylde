@@ -13,6 +13,8 @@ export type Tab = {
   canvas: HTMLCanvasElement;
   renderer: Renderer;
   exited: boolean;
+  /** The program asked for mouse events: they go to it, not to selection. */
+  mouse: boolean;
   /** Removes the listeners the tab registered outside its canvas. */
   abort: AbortController;
 };
@@ -47,6 +49,7 @@ export async function openTab(
     canvas,
     renderer,
     exited: false,
+    mouse: false,
     abort: new AbortController(),
   };
 
@@ -54,6 +57,7 @@ export async function openTab(
   onEvent.onmessage = (event) => {
     switch (event.type) {
       case "Frame":
+        tab.mouse = event.data.mouse;
         renderer.apply(event.data);
         break;
       case "Title":
@@ -80,8 +84,7 @@ export async function openTab(
     canvas.remove();
     throw error;
   }
-  attachMouse(canvas, textarea, renderer, tab.id, tab.abort.signal);
-  attachWheel(tab);
+  attachMouse(canvas, textarea, renderer, tab.id, () => tab.mouse, tab.abort.signal);
   return tab;
 }
 
@@ -107,26 +110,5 @@ function flashBell(canvas: HTMLCanvasElement): void {
   bellTimers.set(
     canvas,
     window.setTimeout(() => canvas.classList.remove("bell"), 120),
-  );
-}
-
-// The wheel arrives in pixels (fractional on a trackpad): we accumulate and
-// send the core whole rows only. deltaY > 0 means "down", which for the core
-// is a negative delta.
-function attachWheel(tab: Tab): void {
-  let remainder = 0;
-  tab.canvas.addEventListener(
-    "wheel",
-    (e) => {
-      e.preventDefault();
-      const pixelsPerLine =
-        e.deltaMode === WheelEvent.DOM_DELTA_LINE ? 1 : tab.renderer.cellHeightCss();
-      remainder += e.deltaY / pixelsPerLine;
-      const lines = Math.trunc(remainder);
-      if (lines === 0) return;
-      remainder -= lines;
-      void invoke("session_scroll", { id: tab.id, delta: -lines });
-    },
-    { passive: false },
   );
 }

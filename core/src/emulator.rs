@@ -23,7 +23,7 @@ use alacritty_terminal::{
 
 use crate::{
     frame::{Cursor, CursorShape, Frame, LineUpdate, Segment, SegmentFlags},
-    input::InputMode,
+    input::{InputMode, MouseTracking},
     theme::Theme,
 };
 
@@ -131,6 +131,16 @@ impl Emulator {
             bracketed_paste: mode.contains(TermMode::BRACKETED_PASTE),
             alt_screen: mode.contains(TermMode::ALT_SCREEN),
             alternate_scroll: mode.contains(TermMode::ALTERNATE_SCROLL),
+            sgr_mouse: mode.contains(TermMode::SGR_MOUSE),
+            mouse: if mode.contains(TermMode::MOUSE_MOTION) {
+                MouseTracking::Motion
+            } else if mode.contains(TermMode::MOUSE_DRAG) {
+                MouseTracking::Drag
+            } else if mode.contains(TermMode::MOUSE_REPORT_CLICK) {
+                MouseTracking::Click
+            } else {
+                MouseTracking::Off
+            },
         }
     }
 
@@ -310,6 +320,7 @@ impl Emulator {
             cursor,
             offset: self.display_offset() as u32,
             history: self.term.grid().history_size() as u32,
+            mouse: self.input_mode().mouse != MouseTracking::Off,
         })
     }
 
