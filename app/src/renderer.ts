@@ -40,7 +40,9 @@ export class Renderer {
     private fontFamily: string,
     private fontSize: number,
   ) {
-    this.ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("the canvas has no 2D context");
+    this.ctx = ctx;
   }
 
   /** Measures a cell with the current font, in physical pixels. */

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { cellAtPoint, type Cell } from "./geometry";
+import { type Cell, cellAtPoint } from "./geometry";
 import type { Renderer } from "./renderer";
 
 // Same names as the `SelectionKind` variants in the core.
