@@ -3,9 +3,20 @@ import { invoke } from "@tauri-apps/api/core";
 // Special keys, in the shape the core deserializes as `Key`.
 // `F(n)` and `Char(c)` are variants with data: `{ F: 5 }`, `{ Char: "c" }`.
 type Key =
-  | "Enter" | "Tab" | "Backspace" | "Escape"
-  | "Up" | "Down" | "Left" | "Right"
-  | "Home" | "End" | "PageUp" | "PageDown" | "Insert" | "Delete"
+  | "Enter"
+  | "Tab"
+  | "Backspace"
+  | "Escape"
+  | "Up"
+  | "Down"
+  | "Left"
+  | "Right"
+  | "Home"
+  | "End"
+  | "PageUp"
+  | "PageDown"
+  | "Insert"
+  | "Delete"
   | { F: number }
   | { Char: string };
 

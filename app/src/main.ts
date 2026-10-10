@@ -6,11 +6,19 @@ import { actionOf } from "./shortcuts";
 import { Tabs } from "./tabs";
 import type { Font } from "./types";
 
-const sidebar = document.querySelector<HTMLElement>("#sidebar")!;
-const list = document.querySelector<HTMLElement>("#tabs")!;
-const newTab = document.querySelector<HTMLElement>("#new-tab")!;
-const terminal = document.querySelector<HTMLElement>("#terminal")!;
-const screens = document.querySelector<HTMLElement>("#screens")!;
+// The elements of index.html the app is built on: one missing is a bug in
+// the page, not something to recover from.
+function element(selector: string): HTMLElement {
+  const found = document.querySelector<HTMLElement>(selector);
+  if (!found) throw new Error(`index.html has no ${selector}`);
+  return found;
+}
+
+const sidebar = element("#sidebar");
+const list = element("#tabs");
+const newTab = element("#new-tab");
+const terminal = element("#terminal");
+const screens = element("#screens");
 const appWindow = getCurrentWindow();
 const DEFAULT_TITLE = "Ttylde";
 
