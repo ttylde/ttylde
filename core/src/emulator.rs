@@ -70,6 +70,7 @@ pub struct Emulator {
     history: usize,
     /// Selection as of the last frame, to mark its rows dirty when it changes.
     last_selection: Option<SelectionRange>,
+    focused: bool,
 }
 
 impl Emulator {
@@ -100,6 +101,7 @@ impl Emulator {
             force_full: true,
             history,
             last_selection: None,
+            focused: true,
         }
     }
 
@@ -132,6 +134,7 @@ impl Emulator {
             alt_screen: mode.contains(TermMode::ALT_SCREEN),
             alternate_scroll: mode.contains(TermMode::ALTERNATE_SCROLL),
             sgr_mouse: mode.contains(TermMode::SGR_MOUSE),
+            focus_events: mode.contains(TermMode::FOCUS_IN_OUT),
             mouse: if mode.contains(TermMode::MOUSE_MOTION) {
                 MouseTracking::Motion
             } else if mode.contains(TermMode::MOUSE_DRAG) {
@@ -245,13 +248,17 @@ impl Emulator {
             return None;
         }
 
-        let shape: CursorShape = match vt.shape {
+        let mut shape: CursorShape = match vt.shape {
             VtCursorShape::Hidden => return None,
             VtCursorShape::Beam => CursorShape::Beam,
             VtCursorShape::Block => CursorShape::Block,
-            VtCursorShape::HollowBlock => CursorShape::Block,
+            VtCursorShape::HollowBlock => CursorShape::Hollow,
             VtCursorShape::Underline => CursorShape::Underline,
         };
+
+        if !self.focused {
+            shape = CursorShape::Hollow;
+        }
 
         Some(Cursor {
             row: row as u16,
@@ -361,5 +368,17 @@ impl Emulator {
                 _ => None,
             })
             .collect()
+    }
+
+    /// Tells the emulator whether its window has the focus.
+    /// Returns `false` if that was already known.
+    pub fn set_focused(&mut self, focused: bool) -> bool {
+        if self.focused == focused {
+            return false;
+        }
+
+        self.focused = focused;
+        self.dirty = true;
+        true
     }
 }

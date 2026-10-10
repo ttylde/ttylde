@@ -1,4 +1,4 @@
-import { closeTab, openTab, resizeTab, type Tab } from "./tab";
+import { closeTab, focusTab, openTab, resizeTab, type Tab } from "./tab";
 import type { Font } from "./types";
 
 /** Shown in the sidebar for a tab whose program has set no title. */
@@ -25,6 +25,8 @@ export type TabsOptions = {
 export class Tabs {
   private entries: Entry[] = [];
   private active: Tab | null = null;
+  // Whether the window has the focus: only then the visible tab has it.
+  private focused = document.hasFocus();
 
   constructor(private options: TabsOptions) {}
 
@@ -78,6 +80,12 @@ export class Tabs {
     if (entry) this.activate(entry.tab);
   }
 
+  /** The window gained or lost the focus. */
+  setFocused(focused: boolean): void {
+    this.focused = focused;
+    if (this.active) focusTab(this.active, focused);
+  }
+
   /** Refits every tab to the terminal area, hidden ones included. */
   resize(): void {
     const { clientWidth, clientHeight } = this.options.screens;
@@ -85,6 +93,8 @@ export class Tabs {
   }
 
   private activate(tab: Tab): void {
+    if (this.active && this.active !== tab) focusTab(this.active, false);
+    focusTab(tab, this.focused);
     this.active = tab;
     for (const entry of this.entries) {
       const isActive = entry.tab === tab;
@@ -111,11 +121,12 @@ export class Tabs {
     closeTab(tab);
     if (tab !== this.active) return;
 
+    // The session is gone: there is no focus to take away from it.
+    this.active = null;
     const next = this.entries[Math.min(index, this.entries.length - 1)];
     if (next) {
       this.activate(next.tab);
     } else {
-      this.active = null;
       this.options.onActiveChange(null);
     }
   }

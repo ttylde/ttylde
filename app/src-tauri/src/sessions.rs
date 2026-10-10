@@ -174,6 +174,14 @@ pub fn session_close(state: State<'_, Sessions>, id: u32) {
     state.open.lock().unwrap().remove(&id);
 }
 
+/// The window gained or lost the focus, or the tab became the visible one.
+#[tauri::command]
+pub fn session_focus(state: State<'_, Sessions>, id: u32, focused: bool) -> Result<(), String> {
+    state
+        .with_session(id, |session| session.focus(focused))?
+        .map_err(|e| e.to_string())
+}
+
 /// Font family and size from the config file, for the renderer.
 #[tauri::command]
 pub fn config_font(config: State<'_, Config>) -> Font {

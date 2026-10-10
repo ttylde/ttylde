@@ -40,6 +40,10 @@ const tabs = new Tabs({
 sidebar.addEventListener("mousedown", (e) => e.preventDefault());
 newTab.addEventListener("click", () => void tabs.open());
 
+// Without the focus the visible tab draws a hollow cursor.
+window.addEventListener("focus", () => tabs.setFocused(true));
+window.addEventListener("blur", () => tabs.setFocused(false));
+
 // App shortcuts are caught before the keyboard sees the key.
 window.addEventListener(
   "keydown",

@@ -110,6 +110,14 @@ export function resizeTab(tab: Tab, width: number, height: number): void {
   void invoke("session_resize", { id: tab.id, cols, rows });
 }
 
+/**
+ * Tells the session whether it is the one the user is looking at: the core
+ * draws the cursor hollow when it is not, and informs the program.
+ */
+export function focusTab(tab: Tab, focused: boolean): void {
+  if (tab.id >= 0) void invoke("session_focus", { id: tab.id, focused });
+}
+
 // Visual bell: the screen brightens for a moment. A bell that rings while
 // the flash is on restarts it.
 const bellTimers = new WeakMap<HTMLCanvasElement, number>();

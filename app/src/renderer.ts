@@ -199,6 +199,15 @@ export class Renderer {
       case "beam":
         ctx.fillRect(x, y, 2 * this.dpr, cellHeight);
         break;
+      // Four edges, one device pixel thick: the text under it stays as it is.
+      case "hollow": {
+        const t = this.dpr;
+        ctx.fillRect(x, y, cellWidth, t);
+        ctx.fillRect(x, y + cellHeight - t, cellWidth, t);
+        ctx.fillRect(x, y, t, cellHeight);
+        ctx.fillRect(x + cellWidth - t, y, t, cellHeight);
+        break;
+      }
     }
   }
 

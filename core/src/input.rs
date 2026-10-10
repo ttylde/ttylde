@@ -97,6 +97,8 @@ pub struct InputMode {
     pub alternate_scroll: bool,
     pub mouse: MouseTracking,
     pub sgr_mouse: bool,
+    /// The program wants `ESC [ I` and `ESC [ O` when the focus changes.
+    pub focus_events: bool,
 }
 
 const ESC: u8 = 0x1b;
@@ -282,6 +284,17 @@ pub fn encode_paste(text: &str, mode: InputMode) -> Vec<u8> {
     }
 }
 
+/// The report of a focus change, for the programs that asked for it.
+pub fn encode_focus(focused: bool, mode: InputMode) -> Option<Vec<u8>> {
+    mode.focus_events.then(|| {
+        if focused {
+            b"\x1b[I".to_vec()
+        } else {
+            b"\x1b[O".to_vec()
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,6 +317,7 @@ mod tests {
         alternate_scroll: false,
         mouse: MouseTracking::Off,
         sgr_mouse: false,
+        focus_events: false,
     };
 
     fn enc(key: Key, mods: Mods) -> Vec<u8> {
@@ -369,6 +383,19 @@ mod tests {
             ..plain
         };
         assert_eq!(encode_paste("a\nb", bracketed), b"\x1b[200~a\nb\x1b[201~");
+    }
+
+    // `ESC [ I` in, `ESC [ O` out, and nothing unless the program asked.
+    #[test]
+    fn focus_is_reported_only_when_requested() {
+        let asked = InputMode {
+            focus_events: true,
+            ..InputMode::default()
+        };
+        assert_eq!(encode_focus(true, asked).unwrap(), b"\x1b[I");
+        assert_eq!(encode_focus(false, asked).unwrap(), b"\x1b[O");
+        assert_eq!(encode_focus(true, InputMode::default()), None);
+        assert_eq!(encode_focus(false, InputMode::default()), None);
     }
 
     fn mouse(action: MouseAction, button: Option<MouseButton>, row: u16, col: u16) -> MouseEvent {

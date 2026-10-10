@@ -32,6 +32,7 @@ fn main() {
             sessions::session_select_clear,
             sessions::session_selection_text,
             sessions::session_close,
+            sessions::session_focus,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Ttylde");
