@@ -107,6 +107,9 @@ const ESC: u8 = 0x1b;
 /// the caller leaves it to the system.
 pub fn encode_key(key: Key, mods: Mods, mode: InputMode) -> Option<Vec<u8>> {
     let bytes = match key {
+        // Shift+Enter is "new line without sending": the bytes of Alt+Enter,
+        // which programs already read that way.
+        Key::Enter if mods.shift => b"\x1b\r".to_vec(),
         Key::Enter => with_alt_prefix(mods, vec![b'\r']),
         Key::Tab if mods.shift => b"\x1b[Z".to_vec(),
         Key::Tab => vec![b'\t'],
@@ -349,6 +352,20 @@ mod tests {
     fn alt_prefixes_escape() {
         assert_eq!(enc(Key::Char('b'), ALT), b"\x1bb");
         assert_eq!(enc(Key::Enter, ALT), b"\x1b\r");
+    }
+
+    // Shift+Enter must not look like Enter: a program that sends on Enter
+    // would send where the user asked for a new line.
+    #[test]
+    fn shift_enter_is_not_enter() {
+        let shift_alt = Mods { alt: true, ..SHIFT };
+
+        assert_eq!(enc(Key::Enter, SHIFT), b"\x1b\r");
+        assert_ne!(enc(Key::Enter, SHIFT), enc(Key::Enter, NONE));
+        // one ESC, not two: with Alt it is still the same key
+        assert_eq!(enc(Key::Enter, shift_alt), b"\x1b\r");
+        // the mode of the cursor keys does not touch it
+        assert_eq!(encode_key(Key::Enter, SHIFT, APP).unwrap(), b"\x1b\r");
     }
 
     // Arrows change shape in application cursor mode and with modifiers.
