@@ -44,4 +44,5 @@ export const SegmentFlags = {
   UNDERLINE: 1 << 2,
   STRIKE: 1 << 3,
   WIDE: 1 << 4,
+  CLUSTER: 1 << 5,
 } as const;

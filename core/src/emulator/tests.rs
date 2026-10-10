@@ -129,6 +129,91 @@ fn wide_char_takes_two_columns() {
     assert_eq!(segments[1].cols, 18);
 }
 
+// A combining mark has no cell of its own: it travels with the character
+// before it, in a segment that holds that cell alone.
+#[test]
+fn combining_mark_stays_with_its_character() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed("e\u{301}".as_bytes());
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments[0].text, "e\u{301}");
+    assert_eq!(segments[0].cols, 1);
+    assert_eq!(segments[0].flags, SegmentFlags::CLUSTER);
+    assert_eq!(segments[1].cols, 19);
+}
+
+// Every mark is kept, in the order it arrived.
+#[test]
+fn several_marks_stack_on_one_cell() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed("a\u{308}\u{301}".as_bytes());
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments[0].text, "a\u{308}\u{301}");
+    assert_eq!(segments[0].cols, 1);
+}
+
+// The text around a cluster is not merged with it, same style or not:
+// the renderer has to know where the cluster begins and ends.
+#[test]
+fn cluster_splits_the_text_around_it() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed("ae\u{301}b".as_bytes());
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments[0].text, "a");
+    assert_eq!(segments[0].flags, 0);
+    assert_eq!(segments[1].text, "e\u{301}");
+    assert_eq!(segments[1].flags, SegmentFlags::CLUSTER);
+    // `b` and the rest of the row
+    assert_eq!(segments[2].text.trim_end(), "b");
+    assert_eq!(segments[2].cols, 18);
+    assert_eq!(segments[2].flags, 0);
+}
+
+// Two clusters side by side have the same style and the same flags, and
+// still make two segments: one cell each.
+#[test]
+fn adjacent_clusters_stay_separate() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed("e\u{301}o\u{308}".as_bytes());
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments[0].text, "e\u{301}");
+    assert_eq!(segments[0].cols, 1);
+    assert_eq!(segments[1].text, "o\u{308}");
+    assert_eq!(segments[1].cols, 1);
+}
+
+// The mark of a wide character belongs to the character, not to its spacer.
+#[test]
+fn wide_char_can_be_a_cluster() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed("日\u{301}".as_bytes());
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments[0].text, "日\u{301}");
+    assert_eq!(segments[0].cols, 2);
+    assert_eq!(
+        segments[0].flags,
+        SegmentFlags::WIDE | SegmentFlags::CLUSTER
+    );
+    assert_eq!(segments[1].cols, 18);
+}
+
+// Text without marks is as before: one segment, no flag.
+#[test]
+fn plain_text_is_not_a_cluster() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"abc");
+
+    let segments = emulator.line_segments(0);
+    assert_eq!(segments.len(), 1);
+    assert_eq!(segments[0].cols, 20);
+    assert_eq!(segments[0].flags, 0);
+}
+
 // The cursor follows the written text, with the default block shape.
 #[test]
 fn cursor_follows_the_text() {

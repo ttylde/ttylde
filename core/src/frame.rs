@@ -65,4 +65,6 @@ impl SegmentFlags {
     pub const UNDERLINE: u8 = 1 << 2;
     pub const STRIKE: u8 = 1 << 3;
     pub const WIDE: u8 = 1 << 4;
+    /// The text is one cell: a character with the marks that combine with it.
+    pub const CLUSTER: u8 = 1 << 5;
 }

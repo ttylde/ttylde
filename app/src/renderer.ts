@@ -1,3 +1,4 @@
+import { cellAtCol, cellsOf } from "./geometry";
 import { type Cursor, type Frame, type Segment, SegmentFlags } from "./types";
 
 // Background used before the first frame arrives: from then on colors
@@ -136,6 +137,13 @@ export class Renderer {
     const ctx = this.ctx;
     const y = row * cellHeight;
 
+    // A glyph taller than the row (stacked marks, a fallback font) must not
+    // leave traces on the rows next to it, which are not redrawn with it.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, y, this.canvas.width, cellHeight);
+    ctx.clip();
+
     ctx.fillStyle = this.color(this.background);
     ctx.fillRect(0, y, this.canvas.width, cellHeight);
 
@@ -154,10 +162,11 @@ export class Renderer {
         ctx.fillStyle = this.color(seg.fg);
         const advance = seg.flags & SegmentFlags.WIDE ? cellWidth * 2 : cellWidth;
         let cx = x;
-        // One character per cell: drawing them one by one keeps the grid
-        // aligned even if the font is not exactly the measured width.
-        for (const ch of seg.text) {
-          if (ch !== " ") ctx.fillText(ch, cx, y + ascent);
+        // Drawing the cells one by one keeps the grid aligned even if the
+        // font is not exactly the measured width. A glyph wider than its
+        // cell, as a fallback font may give, is squeezed into it.
+        for (const text of cellsOf(seg)) {
+          if (text !== " ") ctx.fillText(text, cx, y + ascent, advance);
           cx += advance;
         }
       }
@@ -172,6 +181,7 @@ export class Renderer {
       }
       col += seg.cols;
     }
+    ctx.restore();
   }
 
   private drawCursor(cursor: Cursor): void {
@@ -184,12 +194,19 @@ export class Renderer {
     switch (cursor.shape) {
       case "block": {
         ctx.fillRect(x, y, cellWidth, cellHeight);
-        // The character under the cursor stays readable, inverted.
-        const under = this.cellAt(cursor.row, cursor.col);
-        if (under && under.ch !== " ") {
+        // The character under the cursor stays readable, inverted: only
+        // the part of it that is inside the block.
+        const under = cellAtCol(this.rows[cursor.row] ?? [], cursor.col);
+        if (under && under.text !== " ") {
+          const advance = under.flags & SegmentFlags.WIDE ? cellWidth * 2 : cellWidth;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(x, y, cellWidth, cellHeight);
+          ctx.clip();
           ctx.font = this.font(under.flags);
           ctx.fillStyle = this.color(this.background);
-          ctx.fillText(under.ch, x, y + ascent);
+          ctx.fillText(under.text, x, y + ascent, advance);
+          ctx.restore();
         }
         break;
       }
@@ -209,22 +226,6 @@ export class Renderer {
         break;
       }
     }
-  }
-
-  /** The character and attributes in cell (row, col), if any. */
-  private cellAt(row: number, col: number): { ch: string; flags: number } | null {
-    let start = 0;
-    for (const seg of this.rows[row] ?? []) {
-      if (col < start + seg.cols) {
-        if (seg.text.length === 0) return null;
-        const perChar = seg.flags & SegmentFlags.WIDE ? 2 : 1;
-        const index = Math.floor((col - start) / perChar);
-        const ch = Array.from(seg.text)[index];
-        return ch === undefined ? null : { ch, flags: seg.flags };
-      }
-      start += seg.cols;
-    }
-    return null;
   }
 
   private font(flags: number): string {
