@@ -208,6 +208,55 @@ fn mouse_tracking_follows_the_program() {
     assert_eq!(emulator.input_mode().mouse, MouseTracking::Off);
 }
 
+// Without the focus the cursor is hollow whatever shape the program chose,
+// and gets its shape back with the focus.
+#[test]
+fn cursor_is_hollow_without_focus() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b[6 q");
+    assert_eq!(emulator.cursor().unwrap().shape, CursorShape::Beam);
+
+    assert!(emulator.set_focused(false));
+    assert_eq!(emulator.cursor().unwrap().shape, CursorShape::Hollow);
+    assert!(emulator.set_focused(true));
+    assert_eq!(emulator.cursor().unwrap().shape, CursorShape::Beam);
+}
+
+// A cursor the program hid stays hidden.
+#[test]
+fn hidden_cursor_stays_hidden_without_focus() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b[?25l");
+    emulator.set_focused(false);
+    assert_eq!(emulator.cursor(), None);
+}
+
+// A focus change produces a frame on its own; repeating it does not.
+#[test]
+fn focus_change_produces_a_frame_once() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.frame();
+    assert!(!emulator.set_focused(true));
+    assert_eq!(emulator.frame(), None);
+
+    assert!(emulator.set_focused(false));
+    let frame = emulator.frame().unwrap();
+    assert_eq!(frame.cursor.unwrap().shape, CursorShape::Hollow);
+    assert!(!emulator.set_focused(false));
+    assert_eq!(emulator.frame(), None);
+}
+
+// `CSI ? 1004 h` asks for focus reports.
+#[test]
+fn focus_events_follow_the_program() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    assert!(!emulator.input_mode().focus_events);
+    emulator.feed(b"\x1b[?1004h");
+    assert!(emulator.input_mode().focus_events);
+    emulator.feed(b"\x1b[?1004l");
+    assert!(!emulator.input_mode().focus_events);
+}
+
 // Rows that scroll off the screen stay in the history, with negative indices.
 #[test]
 fn scrolled_out_lines_stay_in_history() {

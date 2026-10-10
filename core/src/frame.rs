@@ -43,6 +43,7 @@ pub enum CursorShape {
     Block,
     Underline,
     Beam,
+    Hollow,
 }
 
 /// Attributes of a `Segment`, as bits of `Segment::flags`.

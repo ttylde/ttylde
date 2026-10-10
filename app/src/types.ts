@@ -10,7 +10,7 @@ export type Segment = {
 
 export type LineUpdate = { row: number; segments: Segment[] };
 
-export type CursorShape = "block" | "underline" | "beam";
+export type CursorShape = "block" | "underline" | "beam" | "hollow";
 
 export type Cursor = { row: number; col: number; shape: CursorShape; color: number };
 

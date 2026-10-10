@@ -9,7 +9,7 @@ use crate::{
     emulator::{Emulator, EmulatorEvent, SelectionKind, SelectionSide},
     error::Result,
     frame::Frame,
-    input::{encode_key, encode_mouse, encode_paste, Key, Mods, MouseEvent},
+    input::{encode_focus, encode_key, encode_mouse, encode_paste, Key, Mods, MouseEvent},
     pty::Pty,
     theme::Theme,
 };
@@ -203,6 +203,25 @@ impl Session {
         }
     }
 
+    /// Tells the session whether its window has the focus: the cursor
+    /// changes shape, and the program is told if it asked to be.
+    pub fn focus(&mut self, focused: bool) -> io::Result<()> {
+        let mode = {
+            let mut emulator = self.emulator.lock().unwrap();
+            if !emulator.set_focused(focused) {
+                return Ok(());
+            }
+
+            emulator.input_mode()
+        };
+
+        self.emit_frame();
+        if let Some(bytes) = encode_focus(focused, mode) {
+            self.pty.write(&bytes)?;
+        }
+        Ok(())
+    }
+
     /// Sends the callback the frame produced by a local change (scroll,
     /// selection) that the reader thread would never see.
     fn emit_frame(&self) {
@@ -224,6 +243,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
+    use crate::frame::CursorShape;
     use crate::input::{MouseAction, MouseButton};
 
     const TIMEOUT: Duration = Duration::from_secs(5);
@@ -512,6 +532,38 @@ mod tests {
 
         wait_for_frame(&rx, |f| f.mouse);
         assert!(session.mouse(left_press()).unwrap());
+        wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "ok"));
+    }
+
+    // Losing the focus is a local change: the frame with the hollow cursor
+    // comes from the call, not from the shell.
+    #[test]
+    fn losing_focus_hollows_the_cursor() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args(["-c", "echo ready; read x"]);
+        let (mut session, rx) = spawn_with_channel(cmd);
+        wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "ready"));
+
+        let shape = |f: &Frame| f.cursor.as_ref().map(|c| c.shape);
+        session.focus(false).unwrap();
+        wait_for_frame(&rx, |f| shape(f) == Some(CursorShape::Hollow));
+        session.focus(true).unwrap();
+        wait_for_frame(&rx, |f| shape(f) == Some(CursorShape::Block));
+    }
+
+    // The shell turns focus reporting on and prints `ok` only once the
+    // three bytes of the report (`ESC [ O`) arrive through the PTY.
+    #[test]
+    fn focus_changes_reach_a_program_that_asked_for_them() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args([
+            "-c",
+            r"stty raw -echo; printf '\033[?1004hready\r\n'; dd bs=1 count=3 >/dev/null 2>&1; echo ok; read x",
+        ]);
+        let (mut session, rx) = spawn_with_channel(cmd);
+        wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "ready"));
+
+        session.focus(false).unwrap();
         wait_for_frame(&rx, |f| contains_text(std::slice::from_ref(f), "ok"));
     }
 
