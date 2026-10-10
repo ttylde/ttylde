@@ -189,6 +189,13 @@ impl Emulator {
                 fg = bg;
             }
 
+            // the marks that combine with the character live in the same cell
+            let mut text = cell.c.to_string();
+            let marks = cell.zerowidth();
+            if let Some(marks) = marks {
+                text.extend(marks);
+            }
+
             // check ATTRIBUTES
             let mut attributes: u8 = 0;
             if cell.flags.contains(Flags::BOLD) {
@@ -206,6 +213,9 @@ impl Emulator {
             if cell.flags.intersects(Flags::ALL_UNDERLINES) {
                 attributes |= SegmentFlags::UNDERLINE;
             }
+            if marks.is_some() {
+                attributes |= SegmentFlags::CLUSTER;
+            }
 
             // check WIDTH
             let width: u16 = if cell.flags.contains(Flags::WIDE_CHAR) {
@@ -216,16 +226,17 @@ impl Emulator {
 
             // check if attach the current char to the current segment
             if let Some(last) = segments.last_mut() {
-                let is_same = fg == last.fg && bg == last.bg && attributes == last.flags;
+                let is_same =
+                    marks.is_none() && fg == last.fg && bg == last.bg && attributes == last.flags;
                 if is_same {
-                    last.text.push(cell.c);
+                    last.text.push_str(&text);
                     last.cols += width;
                     continue;
                 }
             }
 
             segments.push(Segment {
-                text: cell.c.to_string(),
+                text,
                 cols: width,
                 fg,
                 bg,
