@@ -49,6 +49,16 @@ describe("actionOf", () => {
     expect(actionOf(stroke({ key: "t", code: "KeyT", metaKey: true }), false)).toBeNull();
   });
 
+  // The backslash is found by what it types: on an Italian keyboard it is
+  // not the key that `code` calls Backslash.
+  test("the backslash toggles the sidebar", () => {
+    const toggle = { type: "toggle-sidebar" };
+    expect(actionOf(stroke({ key: "\\", code: "Backquote", metaKey: true }), true)).toEqual(toggle);
+    const mods = { ctrlKey: true, shiftKey: true };
+    expect(actionOf(stroke({ key: "|", code: "Backslash", ...mods }), false)).toEqual(toggle);
+    expect(actionOf(stroke({ key: "\\", code: "Backslash" }), true)).toBeNull();
+  });
+
   // Keys without a meaning for the app are left alone.
   test("other keys with the modifier are not shortcuts", () => {
     expect(actionOf(stroke({ key: "c", code: "KeyC", metaKey: true }), true)).toBeNull();

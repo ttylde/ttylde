@@ -144,6 +144,106 @@ body {
   filter: brightness(1.6);
 }
 
+/* The tabs and the button that opens one. */
+#group {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The actions at the bottom of the sidebar. */
+#footer {
+  display: flex;
+  justify-content: flex-end;
+  flex: none;
+  margin-top: auto;
+  padding: 10px 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#toggle-sidebar {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: #9fb0bf;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#toggle-sidebar:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Shown in place of the title when the sidebar is a rail. */
+.tab-short {
+  display: none;
+  font:
+    600 10px ui-monospace,
+    Menlo,
+    monospace;
+}
+
+/* The sidebar as a rail: the tabs are small squares in one box. */
+body.collapsed #sidebar {
+  width: 56px;
+  align-items: center;
+  padding: 0 0 12px;
+}
+
+body.collapsed #group {
+  width: 40px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body.collapsed #tabs {
+  gap: 4px;
+  scrollbar-width: none;
+}
+
+body.collapsed .tab,
+body.collapsed #new-tab {
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 6px;
+}
+
+body.collapsed #new-tab {
+  height: 24px;
+  margin-top: 0;
+  font-size: 13px;
+}
+
+body.collapsed .tab-short {
+  display: block;
+}
+
+body.collapsed .tab-title,
+body.collapsed .tab .tab-close,
+body.collapsed #new-tab .text {
+  display: none;
+}
+
+body.collapsed #footer {
+  justify-content: center;
+  width: 32px;
+  padding: 10px 0 0;
+}
+
+/* The traffic lights are wider than the rail: the terminal starts below them. */
+body.collapsed #stage {
+  padding-top: 44px;
+}
+
 /* Off-screen but focusable: it receives the keyboard instead of the canvas. */
 #keyboard {
   position: fixed;

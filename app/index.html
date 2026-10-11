@@ -9,8 +9,13 @@
   <body>
     <aside id="sidebar" data-tauri-drag-region>
       <div id="titlebar" data-tauri-drag-region></div>
-      <div id="tabs"></div>
-      <div id="new-tab"><span class="plus">+</span>New tab</div>
+      <div id="group">
+        <div id="tabs"></div>
+        <div id="new-tab" title="New tab"><span class="plus">+</span><span class="text">New tab</span></div>
+      </div>
+      <div id="footer">
+        <button id="toggle-sidebar" type="button"></button>
+      </div>
     </aside>
     <main id="stage" data-tauri-drag-region>
       <div id="terminal"><div id="screens"></div></div>

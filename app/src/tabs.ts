@@ -1,10 +1,12 @@
+import { shortLabel } from "./label";
 import { closeTab, focusTab, openTab, resizeTab, type Tab } from "./tab";
 import type { Font } from "./types";
 
 /** Shown in the sidebar for a tab whose program has set no title. */
 const UNTITLED = "shell";
 
-type Entry = { tab: Tab; row: HTMLElement; label: HTMLElement };
+// `short` is what is left of the title when the sidebar is a rail.
+type Entry = { tab: Tab; row: HTMLElement; label: HTMLElement; short: HTMLElement };
 
 export type TabsOptions = {
   /** Where the rows go, in the sidebar. */
@@ -54,14 +56,15 @@ export class Tabs {
 
     const row = document.createElement("div");
     row.className = "tab";
+    const short = document.createElement("span");
+    short.className = "tab-short";
     const label = document.createElement("span");
     label.className = "tab-title";
-    label.textContent = tab.title ?? UNTITLED;
     const close = document.createElement("button");
     close.className = "tab-close";
     close.title = "Close tab";
     close.textContent = "×";
-    row.append(label, close);
+    row.append(short, label, close);
     list.appendChild(row);
 
     row.addEventListener("click", () => this.activate(tab));
@@ -70,7 +73,8 @@ export class Tabs {
       this.close(tab);
     });
 
-    this.entries.push({ tab, row, label });
+    this.entries.push({ tab, row, label, short });
+    this.retitle(tab);
     this.activate(tab);
   }
 
@@ -107,7 +111,11 @@ export class Tabs {
   private retitle(tab: Tab): void {
     const entry = this.entries.find((e) => e.tab === tab);
     if (!entry) return;
-    entry.label.textContent = tab.title ?? UNTITLED;
+    const title = tab.title ?? UNTITLED;
+    entry.label.textContent = title;
+    entry.short.textContent = shortLabel(title);
+    // In the rail the full title is one hover away.
+    entry.row.title = title;
     if (tab === this.active) this.options.onActiveChange(tab);
   }
 
