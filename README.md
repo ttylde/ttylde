@@ -1,5 +1,7 @@
 # ~ Ttylde
 
+[![CI](https://github.com/ttylde/ttylde/actions/workflows/ci.yml/badge.svg)](https://github.com/ttylde/ttylde/actions/workflows/ci.yml)
+
 A terminal emulator for macOS, built around one idea: the terminal should adapt to you, not the other way around. Ttylde is an attempt to put user experience first and build everything else around that.
 
 > !! Early development. It opens a shell, you can type, scroll back and copy text. That's it for now.
