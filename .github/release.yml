@@ -1,0 +1,18 @@
+# How `gh release create --generate-notes` groups the pull requests of a
+# release: by the type label each one carries. The first section that
+# matches wins.
+changelog:
+  categories:
+    - title: ✨ Features
+      labels:
+        - enhancement
+    - title: 🐛 Fixes
+      labels:
+        - bug
+    - title: 🔧 Internal
+      labels:
+        - internal
+        - documentation
+    - title: 📦 Other changes
+      labels:
+        - "*"
