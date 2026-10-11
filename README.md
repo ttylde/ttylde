@@ -1,3 +1,5 @@
+<p align="center"><img src="app/src-tauri/icons/128x128@2x.png" width="128" height="128" alt="Ttylde icon"></p>
+
 # ~ Ttylde
 
 [![CI](https://github.com/ttylde/ttylde/actions/workflows/ci.yml/badge.svg)](https://github.com/ttylde/ttylde/actions/workflows/ci.yml)
@@ -16,6 +18,12 @@ Requirements: Rust (stable), Node.js, [pnpm](https://pnpm.io).
 cd app
 pnpm install
 pnpm tauri dev
+```
+
+The app icons are generated from `assets/icons/full.png`; after changing it:
+
+```sh
+cd app && pnpm icons
 ```
 
 Tests:
