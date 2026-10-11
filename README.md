@@ -6,9 +6,41 @@
 
 A terminal emulator for macOS, built around one idea: the terminal should adapt to you, not the other way around. Ttylde is an attempt to put user experience first and build everything else around that.
 
-> !! Early development. It opens a shell, you can type, scroll back and copy text. That's it for now.
+> !! Early development. Version 0.1 is a terminal you can work in all day; what makes Ttylde its own (spaces, history, favorites, panes) is still ahead. There is no packaged app yet: it runs from source.
 
 VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io/crates/alacritty_terminal), wrapped behind Ttylde's own interface.
+
+## What works today
+
+- **Tabs** in a sidebar, each with its own session. The sidebar collapses to a rail.
+- **Scrollback, selection and copy**: drag, double click for a word, triple click for a line.
+- **Mouse and focus reporting** for the programs that ask for them (vim, htop, tmux). Hold Shift to select text anyway.
+- **Unicode**: wide characters and combining marks, with glyphs from fallback fonts kept inside their cells.
+- **A config file** for the font and the theme colors.
+
+| Shortcut | |
+|---|---|
+| `Cmd+T` | New tab |
+| `Cmd+1` … `Cmd+9` | Go to a tab |
+| `Cmd+\` | Collapse or expand the sidebar |
+| `Shift+Enter` | New line without sending, in the programs that support it |
+
+## Configuration
+
+Ttylde reads `~/.config/ttylde/config.toml` (or `$XDG_CONFIG_HOME/ttylde/config.toml`) once at startup. Everything in it is optional; a file with a mistake is reported on stderr and ignored.
+
+```toml
+[font]
+family = "JetBrains Mono"
+size = 14                 # between 6 and 72
+
+[theme]
+foreground = "#d8d8d2"
+background = "#16161a"
+cursor = "#e8e8e2"
+selection = "#3a3f58"
+# ansi = ["#000000", ...]  # the 16 ANSI colors, all of them or none
+```
 
 ## Running it
 
