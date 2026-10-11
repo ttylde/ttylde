@@ -2,7 +2,10 @@
 // shortcuts: Cmd on macOS, Ctrl+Shift elsewhere (plain Ctrl belongs to the
 // programs running in the terminal).
 
-export type Action = { type: "new-tab" } | { type: "select-tab"; index: number };
+export type Action =
+  | { type: "new-tab" }
+  | { type: "select-tab"; index: number }
+  | { type: "toggle-sidebar" };
 
 /** The parts of a `KeyboardEvent` a shortcut depends on. */
 export type KeyStroke = Pick<
@@ -21,6 +24,9 @@ function hasAppModifier(e: KeyStroke, mac: boolean): boolean {
 export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
   if (!hasAppModifier(e, mac)) return null;
   if (e.key.toLowerCase() === "t") return { type: "new-tab" };
+  // `key`, not `code`: the backslash sits on different keys across layouts.
+  // With Shift held it is the bar.
+  if (e.key === "\\" || e.key === "|") return { type: "toggle-sidebar" };
   // `code`, not `key`: with Shift held the key is a symbol, not a digit.
   const digit = /^Digit([1-9])$/.exec(e.code);
   if (digit) return { type: "select-tab", index: Number(digit[1]) - 1 };
