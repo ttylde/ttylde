@@ -65,25 +65,43 @@ body {
   font-family: ui-monospace, Menlo, monospace;
 }
 
-.tab-close {
+/* The icon the user picked, in the color of the tab. */
+.tab-icon {
+  width: 16px;
+  flex: none;
+  text-align: center;
+  color: var(--tab-color);
+}
+
+/* Rename and close, shown while the pointer is on the row. */
+.tab-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  visibility: hidden;
+}
+
+.tab:hover .tab-actions {
+  visibility: visible;
+}
+
+.tab-action {
   width: 18px;
   height: 18px;
-  flex: none;
   padding: 0;
   border: 0;
   border-radius: 4px;
   background: none;
   color: #9fb0bf;
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1;
-  visibility: hidden;
 }
 
-.tab:hover .tab-close {
-  visibility: visible;
+.tab-close {
+  font-size: 13px;
 }
 
-.tab-close:hover {
+.tab-action:hover {
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
 }
@@ -184,6 +202,7 @@ body {
     600 10px ui-monospace,
     Menlo,
     monospace;
+  color: var(--tab-color);
 }
 
 /* The sidebar as a rail: the tabs are small squares in one box. */
@@ -227,8 +246,9 @@ body.collapsed .tab-short {
   display: block;
 }
 
+body.collapsed .tab-icon,
 body.collapsed .tab-title,
-body.collapsed .tab .tab-close,
+body.collapsed .tab .tab-actions,
 body.collapsed #new-tab .text {
   display: none;
 }
@@ -242,6 +262,110 @@ body.collapsed #footer {
 /* The traffic lights are wider than the rail: the terminal starts below them. */
 body.collapsed #stage {
   padding-top: 44px;
+}
+
+/* The popover that edits name, color and icon of a tab. */
+.rename-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.rename {
+  position: fixed;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 260px;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: #1c222b;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.rename button {
+  padding: 0;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rename-name {
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 7px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font:
+    13px ui-monospace,
+    Menlo,
+    monospace;
+  user-select: text;
+}
+
+.rename-colors,
+.rename-icons,
+.rename-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rename-icons {
+  gap: 6px;
+}
+
+.rename-actions {
+  justify-content: flex-end;
+  font-size: 12px;
+}
+
+.rename .rename-color {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.rename .rename-color.picked {
+  box-shadow:
+    0 0 0 2px #1c222b,
+    0 0 0 4px #fff;
+}
+
+.rename .rename-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--tab-color);
+  font-size: 13px;
+}
+
+.rename .rename-icon.picked {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.rename .rename-cancel {
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: none;
+  color: #9fb0bf;
+}
+
+.rename .rename-cancel:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rename .rename-save {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: #e8846b;
+  color: #fff;
+  font-weight: 600;
 }
 
 /* Off-screen but focusable: it receives the keyboard instead of the canvas. */
