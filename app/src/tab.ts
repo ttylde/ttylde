@@ -1,5 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
+import { defaultLook, type Look } from "./look";
 import { attachMouse } from "./mouse";
 import { fontStack, Renderer } from "./renderer";
 import type { Font, SessionEvent } from "./types";
@@ -10,6 +11,8 @@ export type Tab = {
   id: number;
   /** Title set by the program, `null` when there is none. */
   title: string | null;
+  /** Name, color and icon the user chose. */
+  look: Look;
   /** Background of the last frame, `null` before the first one. */
   background: number | null;
   canvas: HTMLCanvasElement;
@@ -50,6 +53,7 @@ export async function openTab(
   const tab: Tab = {
     id: -1,
     title: null,
+    look: defaultLook(),
     background: null,
     canvas,
     renderer,

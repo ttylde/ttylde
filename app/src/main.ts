@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { attachKeyboard } from "./input";
+import { isRenaming } from "./rename";
 import { actionOf } from "./shortcuts";
 import { Tabs } from "./tabs";
 import type { Font } from "./types";
@@ -61,7 +62,7 @@ const tabs = new Tabs({
       void appWindow.close();
       return;
     }
-    void appWindow.setTitle(tab.title ?? DEFAULT_TITLE);
+    void appWindow.setTitle(tab.look.name ?? tab.title ?? DEFAULT_TITLE);
     if (tab.background !== null) {
       terminal.style.background = `#${tab.background.toString(16).padStart(6, "0")}`;
     }
@@ -83,6 +84,8 @@ window.addEventListener("blur", () => tabs.setFocused(false));
 window.addEventListener(
   "keydown",
   (e) => {
+    // While a tab is being renamed the keys are for its name.
+    if (isRenaming()) return;
     const action = actionOf(e);
     if (!action) return;
     e.preventDefault();
