@@ -15,6 +15,9 @@ export type KeyStroke = Pick<
 
 const IS_MAC = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
 
+/** How the shortcut for a new tab is written on this platform. */
+export const NEW_TAB_HINT = IS_MAC ? "⌘T" : "Ctrl+Shift+T";
+
 function hasAppModifier(e: KeyStroke, mac: boolean): boolean {
   if (e.altKey) return false;
   return mac ? e.metaKey && !e.ctrlKey && !e.shiftKey : e.ctrlKey && e.shiftKey && !e.metaKey;

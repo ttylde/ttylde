@@ -147,7 +147,7 @@ export function focusTab(tab: Tab, focused: boolean): void {
   if (tab.id >= 0) void invoke("session_focus", { id: tab.id, focused });
 }
 
-// Visual bell: the screen brightens for a moment. A bell that rings while
+// Visual bell: the screen flashes for a moment. A bell that rings while
 // the flash is on restarts it.
 const bellTimers = new WeakMap<HTMLCanvasElement, number>();
 function flashBell(canvas: HTMLCanvasElement): void {

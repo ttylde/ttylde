@@ -15,7 +15,7 @@
         "title": "Ttylde",
         "width": 900,
         "height": 600,
-        "backgroundColor": "#2b3440",
+        "backgroundColor": "#f3f6fc",
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "trafficLightPosition": {

@@ -1,9 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import { SIDEBAR_ICON } from "./icons";
 import { attachKeyboard } from "./input";
+import { isMenuOpen } from "./menu";
 import { isRenaming } from "./rename";
-import { actionOf } from "./shortcuts";
+import { fontStack } from "./renderer";
+import { actionOf, NEW_TAB_HINT } from "./shortcuts";
 import { defaultTitle } from "./tab";
 import { Tabs } from "./tabs";
 import type { Font } from "./types";
@@ -33,8 +36,6 @@ function isCollapsed(): boolean {
 }
 function showCollapsed(collapsed: boolean): void {
   document.body.classList.toggle("collapsed", collapsed);
-  // The filled half of the square is the side the sidebar goes to.
-  toggle.textContent = collapsed ? "◨" : "◧";
   toggle.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
 }
 function setCollapsed(collapsed: boolean): void {
@@ -43,6 +44,9 @@ function setCollapsed(collapsed: boolean): void {
     localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
   } catch {}
 }
+// The icon is the same in both states: the style sheet turns it around.
+toggle.innerHTML = SIDEBAR_ICON;
+element("#new-tab .hint").textContent = NEW_TAB_HINT;
 try {
   showCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
 } catch {
@@ -50,6 +54,14 @@ try {
 }
 
 const font = await invoke<Font>("config_font");
+// The canvas measures and draws with the font as soon as a tab opens: the
+// one shipped with the app must be loaded by then. A font of the system is
+// already there, and a name nobody knows falls back to the next in line.
+await Promise.allSettled(
+  ["", "bold ", "italic ", "bold italic "].map((style) =>
+    document.fonts.load(`${style}${font.size}px ${fontStack(font.family)}`),
+  ),
+);
 const keyboard = attachKeyboard(() => tabs.activeId());
 const tabs = new Tabs({
   list,
@@ -85,8 +97,9 @@ window.addEventListener("blur", () => tabs.setFocused(false));
 window.addEventListener(
   "keydown",
   (e) => {
-    // While a tab is being renamed the keys are for its name.
-    if (isRenaming()) return;
+    // While a tab is being renamed the keys are for its name, and a menu
+    // takes them for itself.
+    if (isRenaming() || isMenuOpen()) return;
     const action = actionOf(e);
     if (!action) return;
     e.preventDefault();

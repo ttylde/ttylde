@@ -35,9 +35,9 @@ export function openRename(options: RenameOptions): void {
 
   // Covers the window: a click anywhere else cancels.
   const backdrop = document.createElement("div");
-  backdrop.className = "rename-backdrop";
+  backdrop.className = "popover-backdrop";
   const popover = document.createElement("div");
-  popover.className = "rename";
+  popover.className = "popover rename";
 
   const input = document.createElement("input");
   input.className = "rename-name";

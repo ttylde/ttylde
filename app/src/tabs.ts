@@ -1,4 +1,6 @@
+import { RENAME_ICON } from "./icons";
 import { shortLabel } from "./label";
+import { closeMenu, openMenu } from "./menu";
 import { closeRename, openRename } from "./rename";
 import { closeTab, defaultTitle, focusTab, openTab, resizeTab, type Tab } from "./tab";
 import type { Font } from "./types";
@@ -37,8 +39,9 @@ export class Tabs {
   private active: Tab | null = null;
   // Whether the window has the focus: only then the visible tab has it.
   private focused = document.hasFocus();
-  // The tab the popover is editing.
+  // The tab the popover is editing, and the one a menu is open on.
   private renaming: Tab | null = null;
+  private inMenu: Tab | null = null;
 
   constructor(private options: TabsOptions) {}
 
@@ -66,6 +69,8 @@ export class Tabs {
 
     const row = document.createElement("div");
     row.className = "tab";
+    const bar = document.createElement("span");
+    bar.className = "tab-bar";
     const icon = document.createElement("span");
     icon.className = "tab-icon";
     const short = document.createElement("span");
@@ -76,25 +81,25 @@ export class Tabs {
     branch.className = "tab-branch";
     const actions = document.createElement("span");
     actions.className = "tab-actions";
-    const edit = document.createElement("button");
-    edit.className = "tab-action";
-    edit.title = "Rename";
-    edit.textContent = "✎";
+    const more = document.createElement("button");
+    more.className = "tab-action tab-more";
+    more.title = "More…";
+    more.textContent = "⋯";
     const close = document.createElement("button");
     close.className = "tab-action tab-close";
     close.title = "Close tab";
     close.textContent = "×";
-    actions.append(edit, close);
-    row.append(icon, short, label, branch, actions);
+    actions.append(more, close);
+    row.append(bar, icon, short, label, branch, actions);
     list.appendChild(row);
 
     row.addEventListener("click", () => this.activate(tab));
     row.addEventListener("dblclick", () => this.rename(tab));
     // A double click on a button is two clicks on it, not a rename.
     actions.addEventListener("dblclick", (e) => e.stopPropagation());
-    edit.addEventListener("click", (e) => {
+    more.addEventListener("click", (e) => {
       e.stopPropagation();
-      this.rename(tab);
+      this.menu(tab);
     });
     close.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -154,15 +159,42 @@ export class Tabs {
     if (tab === this.active) this.options.onActiveChange(tab);
   }
 
+  // Where popovers open: past the edge of the sidebar, over the terminal.
+  private popoverLeft(): number {
+    const { list } = this.options;
+    return (list.closest("aside") ?? list).getBoundingClientRect().right + 6;
+  }
+
+  // Opens the menu of what can be done with `tab`, next to its row.
+  private menu(tab: Tab): void {
+    const entry = this.entries.find((e) => e.tab === tab);
+    if (!entry) return;
+    openMenu({
+      title: entry.label.textContent ?? "",
+      row: entry.row.getBoundingClientRect(),
+      left: this.popoverLeft(),
+      items: [
+        { label: "Rename…", icon: RENAME_ICON, onSelect: () => this.rename(tab) },
+        { label: "Close tab", icon: "×", danger: true, onSelect: () => this.close(tab) },
+      ],
+      onClose: () => {
+        this.inMenu = null;
+        entry.row.classList.remove("in-menu");
+      },
+    });
+    this.inMenu = tab;
+    // The row stays marked while its menu is open, pointer on it or not.
+    entry.row.classList.add("in-menu");
+  }
+
   // Opens the popover next to the row of `tab`, on the side of the terminal.
   private rename(tab: Tab): void {
     const entry = this.entries.find((e) => e.tab === tab);
     if (!entry) return;
-    const { list, textarea } = this.options;
-    const sidebar = list.closest("aside") ?? list;
+    const { textarea } = this.options;
     openRename({
       row: entry.row.getBoundingClientRect(),
-      left: sidebar.getBoundingClientRect().right + 6,
+      left: this.popoverLeft(),
       look: tab.look,
       placeholder: defaultTitle(tab) ?? UNTITLED,
       onSave: (look) => {
@@ -183,6 +215,7 @@ export class Tabs {
     const index = this.entries.findIndex((e) => e.tab === tab);
     if (index < 0) return;
     if (tab === this.renaming) closeRename();
+    if (tab === this.inMenu) closeMenu();
     const [entry] = this.entries.splice(index, 1);
     entry.row.remove();
     closeTab(tab);
