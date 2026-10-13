@@ -693,7 +693,7 @@ fn device_attributes_query_is_answered() {
 // OSC 11 asks for the background: the reply carries the theme color.
 #[test]
 fn background_color_query_is_answered_with_the_theme() {
-    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    let mut emulator = Emulator::new(20, 5, Theme::dark(), 100);
     emulator.feed(b"\x1b]11;?\x07");
 
     assert_eq!(

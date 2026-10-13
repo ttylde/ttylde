@@ -1,4 +1,4 @@
-//! The config file: font and theme colors, in TOML.
+//! The config file: font and theme, in TOML.
 //!
 //! Everything in the file is optional. Serde checks its shape through the
 //! `Raw*` types, where every field may be missing; the values are checked
@@ -35,7 +35,8 @@ pub struct Font {
 impl Default for Font {
     fn default() -> Self {
         Font {
-            family: "Menlo".to_string(),
+            // Shipped with the app: it is there on every machine.
+            family: "JetBrains Mono".to_string(),
             size: 13.0,
         }
     }
@@ -57,9 +58,9 @@ impl Config {
     pub fn parse(raw: &str) -> Result<Config> {
         let parsed: RawConfig = toml::from_str(raw).map_err(|e| Error::Config(e.to_string()))?;
 
-        let default: Config = Config::default();
-        let d_font = default.font;
-        let d_theme = default.theme;
+        let d_font = Font::default();
+        // The colors the file leaves out are those of the theme it names.
+        let d_theme = base(parsed.theme.base)?;
 
         let config: Config = Config {
             font: Font {
@@ -104,6 +105,7 @@ struct RawFont {
 #[derive(Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
 struct RawTheme {
+    base: Option<String>,
     background: Option<String>,
     foreground: Option<String>,
     cursor: Option<String>,
@@ -127,6 +129,17 @@ fn color(field: &str, value: Option<String>, default: u32) -> Result<u32> {
         None => Ok(default),
         Some(text) => parse_color(&text)
             .ok_or_else(|| Error::Config(format!("{field}: `{text}` is not a color"))),
+    }
+}
+
+/// The theme a file starts from: `light`, which is the default, or `dark`.
+fn base(value: Option<String>) -> Result<Theme> {
+    match value.as_deref() {
+        None | Some("light") => Ok(Theme::light()),
+        Some("dark") => Ok(Theme::dark()),
+        Some(name) => Err(Error::Config(format!(
+            "theme.base: `{name}` is not `light` or `dark`"
+        ))),
     }
 }
 
@@ -252,6 +265,37 @@ mod tests {
         let config = Config::parse("[font]\nsize = 16.5").unwrap();
         assert_eq!(config.font.size, 16.5);
         assert_eq!(config.font.family, Config::default().font.family);
+    }
+
+    #[test]
+    fn the_base_theme_can_be_chosen() {
+        assert_eq!(Config::parse("").unwrap().theme, Theme::light());
+        assert_eq!(
+            Config::parse("[theme]\nbase = \"light\"").unwrap().theme,
+            Theme::light()
+        );
+        assert_eq!(
+            Config::parse("[theme]\nbase = \"dark\"").unwrap().theme,
+            Theme::dark()
+        );
+    }
+
+    // A color set in the file wins over the one of the base theme.
+    #[test]
+    fn colors_are_set_on_top_of_the_base_theme() {
+        let theme = Config::parse("[theme]\nbase = \"dark\"\ncursor = \"#ff0000\"")
+            .unwrap()
+            .theme;
+
+        assert_eq!(theme.cursor, 0xff0000);
+        assert_eq!(theme.background, Theme::dark().background);
+    }
+
+    #[test]
+    fn an_unknown_base_theme_is_an_error() {
+        let message = config_error("[theme]\nbase = \"sepia\"");
+        assert!(message.contains("theme.base"), "{message}");
+        assert!(message.contains("sepia"), "{message}");
     }
 
     #[test]
