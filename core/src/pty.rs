@@ -18,8 +18,28 @@ impl PtyWriter {
     }
 }
 
+/// Asks the terminal which process is using it.
+#[derive(Clone)]
+pub struct PtyProbe(Arc<Mutex<Box<dyn MasterPty + Send>>>);
+
+impl PtyProbe {
+    /// The process in the foreground of the terminal, if the system tells.
+    #[cfg(unix)]
+    pub fn foreground_pid(&self) -> Option<u32> {
+        self.0
+            .lock()
+            .unwrap()
+            .process_group_leader()
+            .and_then(|pid| u32::try_from(pid).ok())
+    }
+    #[cfg(not(unix))]
+    pub fn foreground_pid(&self) -> Option<u32> {
+        None
+    }
+}
+
 pub struct Pty {
-    master: Box<dyn MasterPty + Send>,
+    master: PtyProbe,
     child: Box<dyn Child + Send + Sync>,
     writer: PtyWriter,
 }
@@ -40,7 +60,7 @@ impl Pty {
         Ok(Pty {
             child,
             writer: PtyWriter(Arc::new(Mutex::new(writer))),
-            master: pair.master,
+            master: PtyProbe(Arc::new(Mutex::new(pair.master))),
         })
     }
 
@@ -48,8 +68,12 @@ impl Pty {
         self.writer.clone()
     }
 
+    pub fn probe(&self) -> PtyProbe {
+        self.master.clone()
+    }
+
     pub fn reader(&self) -> Result<Box<dyn Read + Send>> {
-        Ok(self.master.try_clone_reader()?)
+        Ok(self.master.0.lock().unwrap().try_clone_reader()?)
     }
 
     pub fn write(&self, bytes: &[u8]) -> io::Result<()> {
@@ -57,7 +81,7 @@ impl Pty {
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> Result<()> {
-        Ok(self.master.resize(PtySize {
+        Ok(self.master.0.lock().unwrap().resize(PtySize {
             rows,
             cols,
             pixel_width: 0,
@@ -133,5 +157,21 @@ mod tests {
         pty.wait().unwrap();
         let str_out = String::from_utf8_lossy(&output);
         assert!(str_out.contains("got ping"));
+    }
+
+    // At a prompt the process in the foreground is the shell itself.
+    #[cfg(unix)]
+    #[test]
+    fn the_foreground_process_is_the_command() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args(["-c", "read IN"]);
+        let mut pty = Pty::spawn(cmd, 80, 24).unwrap();
+
+        let shell = pty.child.process_id();
+        assert!(shell.is_some());
+        assert_eq!(pty.probe().foreground_pid(), shell);
+
+        pty.kill().unwrap();
+        pty.wait().unwrap();
     }
 }

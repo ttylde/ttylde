@@ -34,6 +34,7 @@ export type SessionEvent =
   | { type: "Frame"; data: Frame }
   | { type: "Title"; data: string }
   | { type: "TitleReset" }
+  | { type: "Cwd"; data: string }
   | { type: "Bell" }
   | { type: "Exit" };
 

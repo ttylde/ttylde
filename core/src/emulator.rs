@@ -5,6 +5,7 @@
 
 mod color;
 mod listener;
+mod osc;
 mod selection;
 #[cfg(test)]
 mod tests;
@@ -17,11 +18,16 @@ use alacritty_terminal::{
     index::{Column, Line, Point},
     selection::SelectionRange,
     term::{cell::Flags, Config, TermDamage, TermMode},
-    vte::ansi::{Color, CursorShape as VtCursorShape, NamedColor, Processor},
+    vte::{
+        ansi::{Color, CursorShape as VtCursorShape, NamedColor, Processor},
+        Parser,
+    },
     Term,
 };
 
 use crate::{
+    cwd::Location,
+    emulator::osc::OscWatcher,
     frame::{Cursor, CursorShape, Frame, LineUpdate, Segment, SegmentFlags},
     input::{InputMode, MouseTracking},
     theme::Theme,
@@ -38,6 +44,7 @@ pub enum EmulatorEvent {
     ResetTitle,
     Bell,
     Write(Vec<u8>),
+    Location(Location),
 }
 
 struct Size {
@@ -71,6 +78,9 @@ pub struct Emulator {
     /// Selection as of the last frame, to mark its rows dirty when it changes.
     last_selection: Option<SelectionRange>,
     focused: bool,
+    /// Reads the same bytes as `parser`, for what it leaves out
+    osc_parser: Parser,
+    osc: OscWatcher,
 }
 
 impl Emulator {
@@ -102,12 +112,15 @@ impl Emulator {
             history,
             last_selection: None,
             focused: true,
+            osc_parser: Parser::default(),
+            osc: OscWatcher::default(),
         }
     }
 
     pub fn feed(&mut self, bytes: &[u8]) {
         self.dirty = true;
         self.parser.advance(&mut self.term, bytes);
+        self.osc_parser.advance(&mut self.osc, bytes);
     }
 
     #[cfg(test)]
@@ -363,8 +376,9 @@ impl Emulator {
 
     /// Drains the events produced by the bytes fed so far. Color queries
     /// are answered here, since the reply depends on the theme.
-    pub fn take_events(&self) -> Vec<EmulatorEvent> {
-        self.events
+    pub fn take_events(&mut self) -> Vec<EmulatorEvent> {
+        let mut events: Vec<EmulatorEvent> = self
+            .events
             .take()
             .into_iter()
             .filter_map(|event| match event {
@@ -378,7 +392,10 @@ impl Emulator {
                 }
                 _ => None,
             })
-            .collect()
+            .collect();
+
+        events.extend(self.osc.take().into_iter().map(EmulatorEvent::Location));
+        events
     }
 
     /// Tells the emulator whether its window has the focus.

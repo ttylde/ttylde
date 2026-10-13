@@ -4,6 +4,7 @@ use alacritty_terminal::{
 };
 
 use super::*;
+use crate::cwd::Location;
 
 #[test]
 fn write_text_on_two_lines() {
@@ -714,4 +715,83 @@ fn events_are_drained_once() {
 
     emulator.feed(b"hello");
     assert!(emulator.take_events().is_empty());
+}
+
+fn located(path: &str) -> Vec<EmulatorEvent> {
+    vec![EmulatorEvent::Location(Location {
+        host: "mac".into(),
+        path: path.into(),
+    })]
+}
+
+// OSC 7 is how a shell says where it is.
+#[test]
+fn working_directory_becomes_an_event() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]7;file://mac/Users/me\x07");
+
+    assert_eq!(emulator.take_events(), located("/Users/me"));
+}
+
+// An OSC ends with BEL or with `ESC \`.
+#[test]
+fn working_directory_can_end_with_st() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]7;file://mac/tmp\x1b\\");
+
+    assert_eq!(emulator.take_events(), located("/tmp"));
+}
+
+// A read from the PTY can stop in the middle of a sequence.
+#[test]
+fn working_directory_split_across_reads() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]7;file://mac/Us");
+    assert!(emulator.take_events().is_empty());
+
+    emulator.feed(b"ers/me\x07");
+    assert_eq!(emulator.take_events(), located("/Users/me"));
+}
+
+// The parser splits an OSC at every `;`: one in the path must come back.
+#[test]
+fn working_directory_keeps_its_semicolons() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]7;file://mac/tmp/a;b;c\x07");
+
+    assert_eq!(emulator.take_events(), located("/tmp/a;b;c"));
+}
+
+#[test]
+fn working_directory_that_is_not_a_file_uri_is_ignored() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]7;/Users/me\x07");
+    emulator.feed(b"\x1b]7\x07");
+    emulator.feed(b"\x1b]7;file://mac/tmp/\xff\x07");
+
+    assert!(emulator.take_events().is_empty());
+}
+
+// The second parser reads the same bytes: it must not answer for the first.
+#[test]
+fn other_sequences_are_not_working_directories() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]0;file://mac/tmp\x07");
+
+    assert_eq!(
+        emulator.take_events(),
+        vec![EmulatorEvent::Title("file://mac/tmp".into())]
+    );
+}
+
+// The folder is announced before the prompt that follows it.
+#[test]
+fn working_directory_and_title_arrive_together() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]7;file://mac/tmp\x07\x1b]0;zsh\x07");
+
+    let events = emulator.take_events();
+    assert_eq!(events.len(), 2);
+    assert!(events.contains(&EmulatorEvent::Title("zsh".into())));
+    assert!(events.contains(&located("/tmp")[0]));
 }

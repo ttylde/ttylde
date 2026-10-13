@@ -2,10 +2,12 @@ use portable_pty::CommandBuilder;
 use serde::Serialize;
 use std::{
     io,
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
 use crate::{
+    cwd::{hostname, of_process, Tracker},
     emulator::{Emulator, EmulatorEvent, SelectionKind, SelectionSide},
     error::Result,
     frame::Frame,
@@ -21,6 +23,8 @@ pub enum SessionEvent {
     Frame(Frame),
     Title(String),
     TitleReset,
+    /// The folder the session works in: sent when it changes.
+    Cwd(PathBuf),
     Bell,
     Exit,
 }
@@ -45,6 +49,8 @@ impl Session {
         let pty = Pty::spawn(cmd, cols, rows)?;
         let mut reader = pty.reader()?;
         let writer = pty.writer();
+        let probe = pty.probe();
+        let mut tracker = Tracker::new(hostname());
         let emulator = Arc::new(Mutex::new(Emulator::new(cols, rows, theme, history)));
 
         let shared = Arc::clone(&emulator);
@@ -78,6 +84,20 @@ impl Session {
                                     on_event_for_thread(SessionEvent::TitleReset)
                                 }
                                 EmulatorEvent::Bell => on_event_for_thread(SessionEvent::Bell),
+                                EmulatorEvent::Location(location) => {
+                                    if let Some(folder) = tracker.announce(location) {
+                                        on_event_for_thread(SessionEvent::Cwd(folder));
+                                    }
+                                }
+                            }
+                        }
+
+                        // A shell that does not announce its folder is
+                        // followed through the process in the foreground.
+                        if tracker.needs_probe() {
+                            let folder = probe.foreground_pid().and_then(of_process);
+                            if let Some(folder) = tracker.observe(folder) {
+                                on_event_for_thread(SessionEvent::Cwd(folder));
                             }
                         }
 
@@ -575,5 +595,32 @@ mod tests {
         let (mut session, _rx) = spawn_with_channel(cmd);
 
         assert!(!session.mouse(left_press()).unwrap());
+    }
+
+    // With no word from the shell, the folder is the one of its process.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn the_folder_follows_the_shell() {
+        // The system reports the real path: `/tmp` may be a link.
+        let folder = std::env::temp_dir().canonicalize().unwrap();
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args(["-c", "cd \"$1\" && echo ready && read x", "sh"]);
+        cmd.arg(&folder);
+        let (_session, rx) = spawn_with_channel(cmd);
+
+        wait_for_event(&rx, SessionEvent::Cwd(folder));
+    }
+
+    // OSC 7 is the shell saying where it is: no need to look.
+    #[test]
+    fn an_announced_folder_arrives_as_an_event() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args([
+            "-c",
+            r"printf '\033]7;file:///announced/folder\007'; read x",
+        ]);
+        let (_session, rx) = spawn_with_channel(cmd);
+
+        wait_for_event(&rx, SessionEvent::Cwd("/announced/folder".into()));
     }
 }

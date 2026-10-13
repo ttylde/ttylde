@@ -1,9 +1,9 @@
 import { shortLabel } from "./label";
 import { closeRename, openRename } from "./rename";
-import { closeTab, focusTab, openTab, resizeTab, type Tab } from "./tab";
+import { closeTab, defaultTitle, focusTab, openTab, resizeTab, type Tab } from "./tab";
 import type { Font } from "./types";
 
-/** Shown in the sidebar for a tab whose program has set no title. */
+/** Shown in the sidebar for a tab with no title and no known folder. */
 const UNTITLED = "shell";
 
 // `short` is what is left of the title when the sidebar is a rail.
@@ -136,13 +136,13 @@ export class Tabs {
   private retitle(tab: Tab): void {
     const entry = this.entries.find((e) => e.tab === tab);
     if (!entry) return;
-    const title = tab.look.name ?? tab.title ?? UNTITLED;
+    const title = tab.look.name ?? defaultTitle(tab) ?? UNTITLED;
     entry.icon.textContent = tab.look.icon;
     entry.row.style.setProperty("--tab-color", tab.look.color);
     entry.label.textContent = title;
     entry.short.textContent = shortLabel(title);
-    // In the rail the full title is one hover away.
-    entry.row.title = title;
+    // One hover away: what the program says of itself, and the whole path.
+    entry.row.title = [title, tab.title, tab.cwd].filter((line) => line !== null).join("\n");
     if (tab === this.active) this.options.onActiveChange(tab);
   }
 
@@ -156,7 +156,7 @@ export class Tabs {
       row: entry.row.getBoundingClientRect(),
       left: sidebar.getBoundingClientRect().right + 6,
       look: tab.look,
-      placeholder: tab.title ?? UNTITLED,
+      placeholder: defaultTitle(tab) ?? UNTITLED,
       onSave: (look) => {
         tab.look = look;
         this.retitle(tab);
