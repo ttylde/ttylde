@@ -1,9 +1,9 @@
 import { shortLabel } from "./label";
 import { closeRename, openRename } from "./rename";
-import { closeTab, focusTab, openTab, resizeTab, type Tab } from "./tab";
+import { closeTab, defaultTitle, focusTab, openTab, resizeTab, type Tab } from "./tab";
 import type { Font } from "./types";
 
-/** Shown in the sidebar for a tab whose program has set no title. */
+/** Shown in the sidebar for a tab with no title and no known folder. */
 const UNTITLED = "shell";
 
 // `short` is what is left of the title when the sidebar is a rail.
@@ -12,6 +12,7 @@ type Entry = {
   row: HTMLElement;
   icon: HTMLElement;
   label: HTMLElement;
+  branch: HTMLElement;
   short: HTMLElement;
 };
 
@@ -71,6 +72,8 @@ export class Tabs {
     short.className = "tab-short";
     const label = document.createElement("span");
     label.className = "tab-title";
+    const branch = document.createElement("span");
+    branch.className = "tab-branch";
     const actions = document.createElement("span");
     actions.className = "tab-actions";
     const edit = document.createElement("button");
@@ -82,7 +85,7 @@ export class Tabs {
     close.title = "Close tab";
     close.textContent = "×";
     actions.append(edit, close);
-    row.append(icon, short, label, actions);
+    row.append(icon, short, label, branch, actions);
     list.appendChild(row);
 
     row.addEventListener("click", () => this.activate(tab));
@@ -98,7 +101,7 @@ export class Tabs {
       this.close(tab);
     });
 
-    this.entries.push({ tab, row, icon, label, short });
+    this.entries.push({ tab, row, icon, label, branch, short });
     this.retitle(tab);
     this.activate(tab);
   }
@@ -136,13 +139,18 @@ export class Tabs {
   private retitle(tab: Tab): void {
     const entry = this.entries.find((e) => e.tab === tab);
     if (!entry) return;
-    const title = tab.look.name ?? tab.title ?? UNTITLED;
+    const title = tab.look.name ?? defaultTitle(tab) ?? UNTITLED;
     entry.icon.textContent = tab.look.icon;
     entry.row.style.setProperty("--tab-color", tab.look.color);
     entry.label.textContent = title;
     entry.short.textContent = shortLabel(title);
-    // In the rail the full title is one hover away.
-    entry.row.title = title;
+    entry.branch.textContent = tab.git?.branch ?? "";
+    entry.branch.classList.toggle("dirty", tab.git?.dirty ?? false);
+    // One hover away: what the program says of itself, and the whole path.
+    const branch = tab.git && `${tab.git.branch}${tab.git.dirty ? " (changes to commit)" : ""}`;
+    entry.row.title = [title, tab.title, tab.cwd, branch]
+      .filter((line) => line !== null)
+      .join("\n");
     if (tab === this.active) this.options.onActiveChange(tab);
   }
 
@@ -156,7 +164,7 @@ export class Tabs {
       row: entry.row.getBoundingClientRect(),
       left: sidebar.getBoundingClientRect().right + 6,
       look: tab.look,
-      placeholder: tab.title ?? UNTITLED,
+      placeholder: defaultTitle(tab) ?? UNTITLED,
       onSave: (look) => {
         tab.look = look;
         this.retitle(tab);

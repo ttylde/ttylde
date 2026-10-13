@@ -3810,6 +3810,7 @@ version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
+ "libc",
  "portable-pty",
  "serde",
  "toml 1.1.8+spec-1.1.0",

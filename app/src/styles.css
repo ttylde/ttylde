@@ -65,6 +65,29 @@ body {
   font-family: ui-monospace, Menlo, monospace;
 }
 
+/* The branch of the folder, and a dot when it has changes to commit. */
+.tab-branch {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #9fb0bf;
+  font:
+    11px ui-monospace,
+    Menlo,
+    monospace;
+}
+
+.tab-branch:empty {
+  display: none;
+}
+
+.tab-branch.dirty::after {
+  content: " ●";
+  color: #f0c050;
+}
+
 /* The icon the user picked, in the color of the tab. */
 .tab-icon {
   width: 16px;
@@ -247,6 +270,7 @@ body.collapsed .tab-short {
 }
 
 body.collapsed .tab-icon,
+body.collapsed .tab-branch,
 body.collapsed .tab-title,
 body.collapsed .tab .tab-actions,
 body.collapsed #new-tab .text {

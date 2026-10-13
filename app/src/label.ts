@@ -15,6 +15,12 @@ export function shortLabel(title: string): string {
   return firstChars(folder, 2) || "··";
 }
 
+/** The last folder of a path: the name a tab takes from where it works. */
+export function folderName(path: string): string {
+  const parts = path.split("/").filter((part) => part !== "");
+  return parts[parts.length - 1] ?? "/";
+}
+
 // Letters and digits only, counted by code point.
 function firstChars(text: string, count: number): string {
   return Array.from(text.replace(/[^\p{L}\p{N}]/gu, ""))

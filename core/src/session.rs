@@ -2,13 +2,16 @@ use portable_pty::CommandBuilder;
 use serde::Serialize;
 use std::{
     io,
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
 use crate::{
+    cwd::{hostname, of_process, Tracker},
     emulator::{Emulator, EmulatorEvent, SelectionKind, SelectionSide},
     error::Result,
     frame::Frame,
+    git::{Status, Watcher},
     input::{encode_focus, encode_key, encode_mouse, encode_paste, Key, Mods, MouseEvent},
     pty::Pty,
     theme::Theme,
@@ -21,6 +24,11 @@ pub enum SessionEvent {
     Frame(Frame),
     Title(String),
     TitleReset,
+    /// The folder the session works in: sent when it changes.
+    Cwd(PathBuf),
+    /// The repository of that folder: sent when branch or changes differ.
+    /// `None`: the folder is in no repository.
+    Git(Option<Status>),
     Bell,
     Exit,
 }
@@ -45,11 +53,16 @@ impl Session {
         let pty = Pty::spawn(cmd, cols, rows)?;
         let mut reader = pty.reader()?;
         let writer = pty.writer();
+        let probe = pty.probe();
+        let mut tracker = Tracker::new(hostname());
         let emulator = Arc::new(Mutex::new(Emulator::new(cols, rows, theme, history)));
 
         let shared = Arc::clone(&emulator);
         let on_event = Arc::new(on_event);
         let on_event_for_thread = Arc::clone(&on_event);
+        let on_event_for_git = Arc::clone(&on_event);
+        // Dropped with the reader thread, which ends with the session.
+        let watcher = Watcher::spawn(move |status| on_event_for_git(SessionEvent::Git(status)));
 
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
@@ -78,8 +91,26 @@ impl Session {
                                     on_event_for_thread(SessionEvent::TitleReset)
                                 }
                                 EmulatorEvent::Bell => on_event_for_thread(SessionEvent::Bell),
+                                EmulatorEvent::Location(location) => {
+                                    if let Some(folder) = tracker.announce(location) {
+                                        watcher.set_folder(folder.clone());
+                                        on_event_for_thread(SessionEvent::Cwd(folder));
+                                    }
+                                }
                             }
                         }
+
+                        // A shell that does not announce its folder is
+                        // followed through the process in the foreground.
+                        if tracker.needs_probe() {
+                            let folder = probe.foreground_pid().and_then(of_process);
+                            if let Some(folder) = tracker.observe(folder) {
+                                watcher.set_folder(folder.clone());
+                                on_event_for_thread(SessionEvent::Cwd(folder));
+                            }
+                        }
+                        // A command may have changed branch or files.
+                        watcher.poke();
 
                         if let Some(frame) = frame {
                             on_event_for_thread(SessionEvent::Frame(frame));
@@ -575,5 +606,58 @@ mod tests {
         let (mut session, _rx) = spawn_with_channel(cmd);
 
         assert!(!session.mouse(left_press()).unwrap());
+    }
+
+    // With no word from the shell, the folder is the one of its process.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn the_folder_follows_the_shell() {
+        // The system reports the real path: `/tmp` may be a link.
+        let folder = std::env::temp_dir().canonicalize().unwrap();
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args(["-c", "cd \"$1\" && echo ready && read x", "sh"]);
+        cmd.arg(&folder);
+        let (_session, rx) = spawn_with_channel(cmd);
+
+        wait_for_event(&rx, SessionEvent::Cwd(folder));
+    }
+
+    // OSC 7 is the shell saying where it is: no need to look.
+    #[test]
+    fn an_announced_folder_arrives_as_an_event() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args([
+            "-c",
+            r"printf '\033]7;file:///announced/folder\007'; read x",
+        ]);
+        let (_session, rx) = spawn_with_channel(cmd);
+
+        wait_for_event(&rx, SessionEvent::Cwd("/announced/folder".into()));
+    }
+
+    // The branch is the one of the repository the shell is in.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn the_branch_of_the_folder_arrives_as_an_event() {
+        let folder = std::env::temp_dir()
+            .canonicalize()
+            .unwrap()
+            .join(format!("ttylde-session-git-{}", std::process::id()));
+        std::fs::create_dir_all(folder.join(".git")).unwrap();
+        std::fs::write(folder.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args(["-c", "cd \"$1\" && echo ready && read x", "sh"]);
+        cmd.arg(&folder);
+        let (_session, rx) = spawn_with_channel(cmd);
+
+        wait_for_event(
+            &rx,
+            SessionEvent::Git(Some(Status {
+                branch: "main".into(),
+                dirty: false,
+            })),
+        );
+        std::fs::remove_dir_all(&folder).unwrap();
     }
 }

@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { attachKeyboard } from "./input";
 import { isRenaming } from "./rename";
 import { actionOf } from "./shortcuts";
+import { defaultTitle } from "./tab";
 import { Tabs } from "./tabs";
 import type { Font } from "./types";
 
@@ -62,7 +63,7 @@ const tabs = new Tabs({
       void appWindow.close();
       return;
     }
-    void appWindow.setTitle(tab.look.name ?? tab.title ?? DEFAULT_TITLE);
+    void appWindow.setTitle(tab.look.name ?? defaultTitle(tab) ?? DEFAULT_TITLE);
     if (tab.background !== null) {
       terminal.style.background = `#${tab.background.toString(16).padStart(6, "0")}`;
     }
