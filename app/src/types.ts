@@ -30,11 +30,15 @@ export type Frame = {
 /** Mirror of `Font` in core/src/config.rs. */
 export type Font = { family: string; size: number };
 
+/** Mirror of `Status` in core/src/git.rs. */
+export type GitStatus = { branch: string; dirty: boolean };
+
 export type SessionEvent =
   | { type: "Frame"; data: Frame }
   | { type: "Title"; data: string }
   | { type: "TitleReset" }
   | { type: "Cwd"; data: string }
+  | { type: "Git"; data: GitStatus | null }
   | { type: "Bell" }
   | { type: "Exit" };
 

@@ -12,6 +12,7 @@ type Entry = {
   row: HTMLElement;
   icon: HTMLElement;
   label: HTMLElement;
+  branch: HTMLElement;
   short: HTMLElement;
 };
 
@@ -71,6 +72,8 @@ export class Tabs {
     short.className = "tab-short";
     const label = document.createElement("span");
     label.className = "tab-title";
+    const branch = document.createElement("span");
+    branch.className = "tab-branch";
     const actions = document.createElement("span");
     actions.className = "tab-actions";
     const edit = document.createElement("button");
@@ -82,7 +85,7 @@ export class Tabs {
     close.title = "Close tab";
     close.textContent = "×";
     actions.append(edit, close);
-    row.append(icon, short, label, actions);
+    row.append(icon, short, label, branch, actions);
     list.appendChild(row);
 
     row.addEventListener("click", () => this.activate(tab));
@@ -98,7 +101,7 @@ export class Tabs {
       this.close(tab);
     });
 
-    this.entries.push({ tab, row, icon, label, short });
+    this.entries.push({ tab, row, icon, label, branch, short });
     this.retitle(tab);
     this.activate(tab);
   }
@@ -141,8 +144,13 @@ export class Tabs {
     entry.row.style.setProperty("--tab-color", tab.look.color);
     entry.label.textContent = title;
     entry.short.textContent = shortLabel(title);
+    entry.branch.textContent = tab.git?.branch ?? "";
+    entry.branch.classList.toggle("dirty", tab.git?.dirty ?? false);
     // One hover away: what the program says of itself, and the whole path.
-    entry.row.title = [title, tab.title, tab.cwd].filter((line) => line !== null).join("\n");
+    const branch = tab.git && `${tab.git.branch}${tab.git.dirty ? " (changes to commit)" : ""}`;
+    entry.row.title = [title, tab.title, tab.cwd, branch]
+      .filter((line) => line !== null)
+      .join("\n");
     if (tab === this.active) this.options.onActiveChange(tab);
   }
 

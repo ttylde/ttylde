@@ -4,7 +4,7 @@ import { folderName } from "./label";
 import { defaultLook, type Look } from "./look";
 import { attachMouse } from "./mouse";
 import { fontStack, Renderer } from "./renderer";
-import type { Font, SessionEvent } from "./types";
+import type { Font, GitStatus, SessionEvent } from "./types";
 
 /** One session with the canvas it is drawn on. */
 export type Tab = {
@@ -14,6 +14,8 @@ export type Tab = {
   title: string | null;
   /** Folder the session works in, `null` until the core tells. */
   cwd: string | null;
+  /** Repository of that folder, `null` when it is in none. */
+  git: GitStatus | null;
   /** Name, color and icon the user chose. */
   look: Look;
   /** Background of the last frame, `null` before the first one. */
@@ -28,7 +30,7 @@ export type Tab = {
 };
 
 export type TabHandlers = {
-  /** The title or the folder changed. */
+  /** The title, the folder or its repository changed. */
   onTitle(tab: Tab): void;
   onBackground(tab: Tab): void;
   onExit(tab: Tab): void;
@@ -58,6 +60,7 @@ export async function openTab(
     id: -1,
     title: null,
     cwd: null,
+    git: null,
     look: defaultLook(),
     background: null,
     canvas,
@@ -88,6 +91,10 @@ export async function openTab(
         break;
       case "Cwd":
         tab.cwd = event.data;
+        handlers.onTitle(tab);
+        break;
+      case "Git":
+        tab.git = event.data;
         handlers.onTitle(tab);
         break;
       case "Bell":
