@@ -3,7 +3,7 @@ import { type Cursor, type Frame, type Segment, SegmentFlags } from "./types";
 
 // Background used before the first frame arrives: from then on colors
 // (background and cursor included) come already resolved from the core.
-const INITIAL_BG = 0x16161a;
+const INITIAL_BG = 0xffffff;
 
 /**
  * The CSS font family for a configured font: the name quoted, followed by

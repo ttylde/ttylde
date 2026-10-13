@@ -37,6 +37,10 @@ describe("popoverTop", () => {
     expect(popoverTop(780, 180, 800)).toBe(612);
   });
 
+  test("the lift can be chosen", () => {
+    expect(popoverTop(200, 180, 800, 6)).toBe(194);
+  });
+
   test("never goes above the window", () => {
     expect(popoverTop(10, 180, 800)).toBe(8);
     expect(popoverTop(100, 180, 150)).toBe(8);

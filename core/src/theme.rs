@@ -27,8 +27,25 @@ impl Theme {
     }
 }
 
-impl Default for Theme {
-    fn default() -> Self {
+impl Theme {
+    /// Dark text on white: the colors of the interface around the terminal.
+    pub fn light() -> Self {
+        Theme {
+            foreground: 0x15211c,
+            background: 0xffffff,
+            cursor: 0x2466ff,
+            selection: 0xcfddff,
+            ansi: [
+                // normal: black, red, green, yellow, blue, magenta, cyan, white
+                0x15211c, 0xd04a42, 0x1f9a6a, 0x8a7d12, 0x1f52d6, 0x7c5cf0, 0x0f8a9d, 0x5f6f68,
+                // bright, same order: on white the bright ones are the darker
+                0x74827c, 0xb9382f, 0x157a53, 0x6e630c, 0x123dba, 0x5b3fd0, 0x0b6f80, 0x93a19b,
+            ],
+        }
+    }
+
+    /// Light text on near black.
+    pub fn dark() -> Self {
         Theme {
             foreground: 0xd8d8d2,
             background: 0x16161a,
@@ -41,6 +58,12 @@ impl Default for Theme {
                 0x5c5c66, 0xf08894, 0xa8dc98, 0xf0d890, 0x92bcf4, 0xd4a6ee, 0x8cdce0, 0xf4f4f0,
             ],
         }
+    }
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Theme::light()
     }
 }
 

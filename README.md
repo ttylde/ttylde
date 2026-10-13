@@ -31,10 +31,12 @@ Ttylde reads `~/.config/ttylde/config.toml` (or `$XDG_CONFIG_HOME/ttylde/config.
 
 ```toml
 [font]
-family = "JetBrains Mono"
-size = 14                 # between 6 and 72
+family = "JetBrains Mono"  # the default: it ships with the app
+size = 13                  # between 6 and 72
 
 [theme]
+base = "dark"              # "light" (the default) or "dark"
+# Any of these replaces the color of the base theme:
 foreground = "#d8d8d2"
 background = "#16161a"
 cursor = "#e8e8e2"

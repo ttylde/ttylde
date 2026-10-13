@@ -1,11 +1,76 @@
+/* Shipped with the app, so the interface and the terminal look the same on
+   every machine. License in fonts/OFL.txt. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  src: url("./fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 400;
+  src: url("./fonts/JetBrainsMono-Italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  src: url("./fonts/JetBrainsMono-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 700;
+  src: url("./fonts/JetBrainsMono-BoldItalic.woff2") format("woff2");
+}
+
+/* The values of the design system. Ink is the one dark color: text is ink,
+   and lines and hovers are ink at a few percent, never a gray of their own. */
+:root {
+  --ink: #15211c;
+  --muted: #5f6f68;
+  --faint: #74827c;
+  --accent: #2466ff;
+  --danger: #d04a42;
+  --warning: #d6c71c;
+
+  --window: #f3f6fc;
+  --panel: #fff;
+  --line: rgba(21, 33, 28, 0.08);
+  --hover: rgba(21, 33, 28, 0.05);
+  --pressed: rgba(21, 33, 28, 0.1);
+  --raised: rgba(255, 255, 255, 0.75);
+  --raised-edge: rgba(255, 255, 255, 0.95);
+
+  --shadow-row: 0 1px 2px rgba(21, 33, 28, 0.06);
+  --shadow-panel: 0 1px 2px rgba(21, 33, 28, 0.05), 0 10px 30px rgba(21, 33, 28, 0.06);
+  --shadow-popover: 0 18px 44px rgba(21, 33, 28, 0.16), 0 0 0 1px rgba(21, 33, 28, 0.05);
+  --shadow-button:
+    0 1px 2px rgba(21, 33, 28, 0.08), 0 0 0 1px rgba(21, 33, 28, 0.06),
+    0 4px 12px rgba(21, 33, 28, 0.1);
+
+  --radius-panel: 14px;
+  --radius-popover: 12px;
+  --radius-row: 8px;
+  --radius-button: 7px;
+
+  --ui: system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
 html,
 body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #2b3440;
-  color: #dfe5ea;
-  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--window);
+  color: var(--ink);
+  font-family: var(--ui);
+  -webkit-font-smoothing: antialiased;
   user-select: none;
 }
 
@@ -20,12 +85,31 @@ body {
   flex-direction: column;
   box-sizing: border-box;
   padding: 0 10px 12px;
+  border-right: 1px solid var(--line);
 }
 
 /* Room for the traffic lights, which the system draws over the page. */
 #titlebar {
   height: 44px;
   flex: none;
+}
+
+/* The name of what the list below holds. */
+#section {
+  flex: none;
+  padding: 0 8px 6px;
+  color: var(--muted);
+  font: 600 10.5px var(--ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* The tabs and the button that opens one. */
+#group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
 }
 
 #tabs {
@@ -36,56 +120,46 @@ body {
   overflow-y: auto;
 }
 
+/* Every row has the border only the active one shows, so that becoming
+   active does not move what is in it. */
 .tab,
 #new-tab {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
-  padding: 6px 8px;
-  border-radius: 7px;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-row);
   font-size: 12px;
   cursor: default;
 }
 
-.tab:hover {
-  background: rgba(255, 255, 255, 0.1);
+.tab:hover,
+.tab.in-menu {
+  background: var(--hover);
 }
 
 .tab.active {
-  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--raised-edge);
+  background: var(--raised);
+  box-shadow: var(--shadow-row);
 }
 
-.tab-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-family: ui-monospace, Menlo, monospace;
-}
-
-/* The branch of the folder, and a dot when it has changes to commit. */
-.tab-branch {
+/* A mark in the color of the tab, at the start of its row. */
+.tab-bar {
+  width: 6px;
   flex: none;
-  max-width: 45%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: #9fb0bf;
-  font:
-    11px ui-monospace,
-    Menlo,
-    monospace;
+  display: flex;
+  justify-content: center;
 }
 
-.tab-branch:empty {
-  display: none;
-}
-
-.tab-branch.dirty::after {
-  content: " ●";
-  color: #f0c050;
+.tab-bar::before {
+  content: "";
+  width: 2px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--tab-color);
 }
 
 /* The icon the user picked, in the color of the tab. */
@@ -96,16 +170,47 @@ body {
   color: var(--tab-color);
 }
 
-/* Rename and close, shown while the pointer is on the row. */
-.tab-actions {
-  display: flex;
-  flex: none;
-  gap: 2px;
-  visibility: hidden;
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
 }
 
-.tab:hover .tab-actions {
-  visibility: visible;
+/* The branch of the folder, and a dot when it has changes to commit. */
+.tab-branch {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font: 10.5px var(--mono);
+}
+
+.tab-branch:empty {
+  display: none;
+}
+
+.tab-branch.dirty::after {
+  content: " ●";
+  color: var(--warning);
+}
+
+/* More and close, shown while the pointer is on the row or its menu is open. */
+.tab-actions {
+  display: none;
+  flex: none;
+  gap: 2px;
+  /* Taller than the text: without this the row would grow under the pointer. */
+  margin: -2px -3px -2px 0;
+}
+
+.tab:hover .tab-actions,
+.tab.in-menu .tab-actions {
+  display: flex;
 }
 
 .tab-action {
@@ -115,33 +220,43 @@ body {
   border: 0;
   border-radius: 4px;
   background: none;
-  color: #9fb0bf;
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 13px;
   line-height: 1;
 }
 
-.tab-close {
-  font-size: 13px;
+.tab-more {
+  font-size: 14px;
 }
 
-.tab-action:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
+.tab-action:hover,
+.tab.in-menu .tab-more {
+  background: var(--line);
+  color: var(--ink);
 }
 
 #new-tab {
-  margin-top: 1px;
-  color: #9fb0bf;
+  color: var(--muted);
 }
 
 #new-tab:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--hover);
+  color: var(--ink);
 }
 
+/* As wide as the bar and the icon of a tab: the text lines up with theirs. */
 #new-tab .plus {
-  width: 16px;
+  width: 30px;
+  flex: none;
+  box-sizing: border-box;
+  padding-left: 14px;
   text-align: center;
+}
+
+#new-tab .hint {
+  margin-left: auto;
+  color: var(--faint);
+  font: 11px var(--mono);
 }
 
 #stage {
@@ -149,17 +264,20 @@ body {
   min-width: 0;
   display: flex;
   box-sizing: border-box;
-  padding: 12px 12px 12px 0;
+  padding: 12px;
 }
 
+/* The terminal is a panel laid on the window. Its color is the background
+   of what is drawn in it, set from the frames. */
 #terminal {
   flex: 1;
   min-width: 0;
   display: flex;
   box-sizing: border-box;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: #16161a;
+  padding: 10px 14px;
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+  box-shadow: var(--shadow-panel);
 }
 
 /* The canvases are sized to this box and stacked in its corner. */
@@ -181,15 +299,9 @@ body {
   display: none;
 }
 
+/* A step toward the opposite: it shows on a light background and on a dark one. */
 .screen.bell {
-  filter: brightness(1.6);
-}
-
-/* The tabs and the button that opens one. */
-#group {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  filter: invert(0.1);
 }
 
 /* The actions at the bottom of the sidebar. */
@@ -199,33 +311,34 @@ body {
   flex: none;
   margin-top: auto;
   padding: 10px 8px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--line);
 }
 
 #toggle-sidebar {
-  padding: 2px 6px;
+  display: grid;
+  place-items: center;
+  padding: 3px 6px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 5px;
   background: none;
-  color: #9fb0bf;
-  font: inherit;
-  font-size: 12px;
+  color: var(--muted);
   cursor: pointer;
 }
 
 #toggle-sidebar:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--hover);
+  color: var(--ink);
+}
+
+#toggle-sidebar svg {
+  display: block;
 }
 
 /* Shown in place of the title when the sidebar is a rail. */
 .tab-short {
   display: none;
-  font:
-    600 10px ui-monospace,
-    Menlo,
-    monospace;
   color: var(--tab-color);
+  font: 600 10px var(--mono);
 }
 
 /* The sidebar as a rail: the tabs are small squares in one box. */
@@ -233,6 +346,7 @@ body.collapsed #sidebar {
   width: 56px;
   align-items: center;
   padding: 0 0 12px;
+  border-right: 0;
 }
 
 body.collapsed #group {
@@ -241,7 +355,7 @@ body.collapsed #group {
   gap: 4px;
   padding: 4px 0;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.55);
 }
 
 body.collapsed #tabs {
@@ -261,19 +375,26 @@ body.collapsed #new-tab {
 
 body.collapsed #new-tab {
   height: 24px;
-  margin-top: 0;
   font-size: 13px;
+}
+
+body.collapsed #new-tab .plus {
+  width: auto;
+  padding: 0;
 }
 
 body.collapsed .tab-short {
   display: block;
 }
 
+body.collapsed #section,
+body.collapsed .tab-bar,
 body.collapsed .tab-icon,
-body.collapsed .tab-branch,
 body.collapsed .tab-title,
+body.collapsed .tab-branch,
 body.collapsed .tab .tab-actions,
-body.collapsed #new-tab .text {
+body.collapsed #new-tab .text,
+body.collapsed #new-tab .hint {
   display: none;
 }
 
@@ -283,52 +404,129 @@ body.collapsed #footer {
   padding: 10px 0 0;
 }
 
-/* The traffic lights are wider than the rail: the terminal starts below them. */
-body.collapsed #stage {
-  padding-top: 44px;
+/* The same icon, pointing the other way. */
+body.collapsed #toggle-sidebar svg {
+  transform: rotate(180deg);
 }
 
-/* The popover that edits name, color and icon of a tab. */
-.rename-backdrop {
+/* The traffic lights are wider than the rail: the terminal starts below
+   them, and the rail no longer keeps it from the edge of the window. */
+body.collapsed #stage {
+  padding: 44px 12px 12px 0;
+}
+
+/* What opens over the window: the menu of a row, the rename popover. A
+   backdrop under it takes the click that closes it. */
+.popover-backdrop {
   position: fixed;
   inset: 0;
   z-index: 30;
 }
 
-.rename {
+.popover {
   position: fixed;
   z-index: 31;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 260px;
   box-sizing: border-box;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  background: #1c222b;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius-popover);
+  background: var(--panel);
+  box-shadow: var(--shadow-popover);
+  color: var(--ink);
 }
 
-.rename button {
-  padding: 0;
+.popover button {
   border: 0;
   font: inherit;
   cursor: pointer;
 }
 
+/* The actions on a row of the sidebar. */
+.menu {
+  gap: 1px;
+  width: 200px;
+  padding: 5px;
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+
+.menu-title {
+  padding: 4px 9px 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font: 11px var(--mono);
+}
+
+.menu-line {
+  height: 1px;
+  margin: 3px 4px;
+  background: var(--line);
+}
+
+.menu .menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+}
+
+.menu .menu-item:hover {
+  background: var(--hover);
+}
+
+.menu .menu-item.danger {
+  color: var(--danger);
+}
+
+.menu .menu-item.danger:hover {
+  background: rgba(208, 74, 66, 0.08);
+}
+
+.menu-icon {
+  display: grid;
+  place-items: center;
+  width: 13px;
+  flex: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.danger .menu-icon {
+  color: inherit;
+}
+
+/* Name, color and icon of a tab. */
+.rename {
+  gap: 10px;
+  width: 260px;
+  padding: 12px;
+}
+
 .rename-name {
   padding: 7px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(21, 33, 28, 0.14);
   border-radius: 7px;
   outline: 0;
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-  font:
-    13px ui-monospace,
-    Menlo,
-    monospace;
+  background: none;
+  color: var(--ink);
+  font: 13px var(--mono);
   user-select: text;
+}
+
+.rename-name::placeholder {
+  color: var(--faint);
+}
+
+.rename-name:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(36, 102, 255, 0.22);
 }
 
 .rename-colors,
@@ -351,45 +549,53 @@ body.collapsed #stage {
 .rename .rename-color {
   width: 18px;
   height: 18px;
+  padding: 0;
   border-radius: 50%;
 }
 
 .rename .rename-color.picked {
   box-shadow:
-    0 0 0 2px #1c222b,
-    0 0 0 4px #fff;
+    0 0 0 2px var(--panel),
+    0 0 0 4px var(--ink);
 }
 
 .rename .rename-icon {
   width: 28px;
   height: 28px;
+  padding: 0;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(21, 33, 28, 0.03);
   color: var(--tab-color);
   font-size: 13px;
 }
 
 .rename .rename-icon.picked {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--pressed);
 }
 
 .rename .rename-cancel {
   padding: 5px 10px;
   border-radius: 6px;
   background: none;
-  color: #9fb0bf;
+  color: var(--muted);
 }
 
 .rename .rename-cancel:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover);
 }
 
+/* The primary button: solid white and lifted, the one opaque thing. */
 .rename .rename-save {
   padding: 5px 12px;
-  border-radius: 6px;
-  background: #e8846b;
-  color: #fff;
+  border-radius: var(--radius-button);
+  background: #fff;
+  box-shadow: var(--shadow-button);
+  color: var(--ink);
   font-weight: 600;
+}
+
+.rename .rename-save:hover {
+  background: #f5f7fc;
 }
 
 /* Off-screen but focusable: it receives the keyboard instead of the canvas. */
