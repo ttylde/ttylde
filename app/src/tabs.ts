@@ -1,5 +1,5 @@
 import { closeForm } from "./form";
-import { RENAME_ICON } from "./icons";
+import { PIN_ICON, RENAME_ICON } from "./icons";
 import { folderName } from "./label";
 import { iconMarkup, type Look } from "./look";
 import { closeMenu, openMenu } from "./menu";
@@ -16,7 +16,7 @@ import {
   type TabHandlers,
   type TabStart,
 } from "./tab";
-import type { Font, SavedState } from "./types";
+import type { Font, SavedState, SavedTab } from "./types";
 
 /** Shown in the sidebar for a tab with no title and no known folder. */
 const UNTITLED = "shell";
@@ -24,8 +24,11 @@ const UNTITLED = "shell";
 /** How far the pointer moves, in pixels, before a press on a row is a drag. */
 const DRAG_THRESHOLD = 4;
 
-/** Where a tab belongs: a space, or none (`null`). */
-type Place = Space | null;
+/** Where the pinned tabs are: no space, but seen from every one. */
+const PINNED = "pinned";
+
+/** Where a tab belongs: a space, none (`null`), or the pinned ones. */
+type Place = Space | null | typeof PINNED;
 
 type Entry = {
   tab: Tab;
@@ -64,6 +67,8 @@ export type SpaceInfo = {
 export type TabsOptions = {
   /** Where the rows go, in the sidebar. */
   list: HTMLElement;
+  /** Where the rows of the pinned tabs go, under the others. */
+  pinned: HTMLElement;
   /** Where the canvases go; its size is the size of every tab. */
   screens: HTMLElement;
   textarea: HTMLTextAreaElement;
@@ -98,17 +103,24 @@ export type TabsOptions = {
  * With no space open, tabs belong to no space, as in a plain terminal.
  * They exist only then: opening a space asks whether they come along. With
  * no space and no such tab, nothing is shown: that is the launcher.
+ *
+ * Pinned tabs belong to no space either, but are there whatever is shown,
+ * launcher included, under the tabs of the space. Showing one leaves the
+ * space where it is: closing it, or picking a tab of the space, goes back.
  */
 export class Tabs {
   private entries: Entry[] = [];
   private spaces: Space[] = [];
   // The space the sidebar shows, `null` for none, and the tab each place
   // was left on.
-  private space: Place = null;
+  private space: Space | null = null;
   private lastTab = new Map<Place, Tab>();
   private closed = new Map<Space, Saved>();
   // The one to resume: closed last, or shown when the app quit.
   private lastClosed: Space | null = null;
+  // The pinned tabs of last time while they start again: until then they
+  // are what is saved, not the few already open.
+  private starting: SavedTab[] | null = null;
   private active: Tab | null = null;
   // Whether the window has the focus: only then the visible tab has it.
   private focused = document.hasFocus();
@@ -171,13 +183,16 @@ export class Tabs {
           tabs: tabs.map(({ look, cwd }) => ({ ...look, cwd })),
         };
       }),
+      pinned:
+        this.starting ?? this.tabsOf(PINNED).map(({ tab }) => ({ ...tab.look, cwd: tab.cwd })),
     };
   }
 
   /**
    * Brings back the spaces of `state`, every one of them closed: those that
    * were open when the app quit count as closed then, and the one that was
-   * shown is the one to resume. No session starts until one is reopened.
+   * shown is the one to resume. No session of a space starts until it is
+   * reopened; the pinned tabs start at once, seen from the launcher.
    */
   restore(state: SavedState): void {
     const quit = state.saved_at ?? Date.now();
@@ -200,6 +215,20 @@ export class Tabs {
     const shown = kept.findIndex((saved) => saved.id === state.shown && saved.closed_at === null);
     this.lastClosed = this.spaces[shown] ?? null;
     this.show(null);
+    void this.startPinned(state.pinned);
+  }
+
+  // Starts the pinned tabs of last time again, each in the folder it was in,
+  // in the order they had. One that cannot start is left out.
+  private async startPinned(tabs: SavedTab[]): Promise<void> {
+    this.starting = tabs;
+    for (const { cwd, ...look } of tabs) {
+      try {
+        await this.openIn(PINNED, { cwd: cwd ?? "~", shell: null }, look);
+      } catch {}
+    }
+    this.starting = null;
+    this.changed();
   }
 
   /**
@@ -218,7 +247,7 @@ export class Tabs {
   // that was saved. A new tab is shown; one that is coming back only if
   // its space shows nothing yet.
   private async openIn(place: Place, start: TabStart, look: Look | null): Promise<Tab | null> {
-    const { list, screens, textarea, font } = this.options;
+    const { list, pinned, screens, textarea, font } = this.options;
     const handlers: TabHandlers = {
       onTitle: (tab) => this.retitle(tab),
       onBackground: (tab) => {
@@ -238,7 +267,10 @@ export class Tabs {
     // be closed or deleted meanwhile; a tab without a space is too late
     // once a space is open.
     const gone =
-      place === null ? this.space !== null : this.closed.has(place) || !this.spaces.includes(place);
+      place !== PINNED &&
+      (place === null
+        ? this.space !== null
+        : this.closed.has(place) || !this.spaces.includes(place));
     if (tab.exited || gone) {
       closeTab(tab);
       this.leaveIfEmpty(place);
@@ -268,7 +300,7 @@ export class Tabs {
     close.textContent = "×";
     actions.append(more, close);
     row.append(mark, icon, label, branch, actions);
-    list.appendChild(row);
+    (place === PINNED ? pinned : list).appendChild(row);
 
     row.addEventListener("click", () => this.activate(tab));
     row.addEventListener("dblclick", () => this.rename(tab));
@@ -288,7 +320,7 @@ export class Tabs {
     this.retitle(tab);
     if (place === this.space) {
       if (!look || !this.lastTab.has(place)) this.activate(tab);
-    } else {
+    } else if (place !== PINNED) {
       // Its space is not the one shown any more: it waits there.
       row.hidden = true;
       this.lastTab.set(place, tab);
@@ -296,9 +328,12 @@ export class Tabs {
     return tab;
   }
 
-  /** Shows the tab at `index` of the space that is shown, if there is one. */
+  /**
+   * Shows the tab at `index` among those of the space that is shown, then
+   * the pinned ones, as the sidebar lists them.
+   */
   select(index: number): void {
-    const entry = this.tabsOf(this.space)[index];
+    const entry = [...this.tabsOf(this.space), ...this.tabsOf(PINNED)][index];
     if (entry) this.activate(entry.tab);
   }
 
@@ -552,12 +587,14 @@ export class Tabs {
 
   // Puts the rows of `place` in the sidebar and shows the tab it was left
   // on. With no space and no tab, nothing is shown: the launcher is.
-  private show(place: Place): void {
+  private show(place: Space | null): void {
     if (place !== null && place === this.space) return;
     closeForm();
     closeMenu();
     this.space = place;
-    for (const entry of this.entries) entry.row.hidden = entry.space !== place;
+    for (const entry of this.entries) {
+      entry.row.hidden = entry.space !== place && entry.space !== PINNED;
+    }
     this.announce();
 
     const tab = this.lastTab.get(place) ?? this.tabsOf(place)[0]?.tab;
@@ -621,7 +658,13 @@ export class Tabs {
       top: entry.row.getBoundingClientRect().top - 6,
       items: [
         { label: "Rename…", icon: RENAME_ICON, onSelect: () => this.rename(tab) },
-        { label: "Move to space…", icon: "›", onSelect: () => this.moveMenu(tab) },
+        entry.space === PINNED
+          ? { label: "Unpin tab", icon: PIN_ICON, onSelect: () => this.unpin(tab) }
+          : { label: "Pin tab", icon: PIN_ICON, onSelect: () => void this.pin(tab) },
+        // A pinned tab is in no space: it is unpinned into one.
+        ...(entry.space === PINNED
+          ? []
+          : [{ label: "Move to space…", icon: "›", onSelect: () => this.moveMenu(tab) }]),
         {
           label: "Close tab",
           icon: "×",
@@ -669,6 +712,58 @@ export class Tabs {
     });
   }
 
+  // Pins `tab`, session alive: it leaves its space, or the tabs without
+  // one, and stays in front if it was. The only tab of a space leaves a new
+  // one there in its folder: a space with no tab would go away.
+  private async pin(tab: Tab): Promise<void> {
+    const entry = this.entries.find((e) => e.tab === tab);
+    if (!entry || entry.space === PINNED) return;
+    const from = entry.space;
+    this.relocate(entry, PINNED);
+    if (from === null) {
+      this.leaveIfEmpty(from);
+    } else if (this.tabsOf(from).length === 0) {
+      await this.openIn(from, { cwd: from.folder, shell: from.shell }, null);
+      if (this.active !== tab && this.placeOf(tab) === PINNED) this.activate(tab);
+    }
+  }
+
+  // Takes the pin away from `tab`: it goes to the end of the space that is
+  // shown, or of the tabs without one if no space is open. Over the
+  // launcher it is shown, as a tab without a space always is.
+  private unpin(tab: Tab): void {
+    const entry = this.entries.find((e) => e.tab === tab);
+    if (!entry || entry.space !== PINNED) return;
+    this.relocate(entry, this.space);
+    if (this.active === null) this.activate(tab);
+  }
+
+  // Moves `entry`, session alive, to the end of `target`, whose rows are
+  // the ones seen: the space shown, the tabs without one, or the pinned.
+  private relocate(entry: Entry, target: Place): void {
+    const from = entry.space;
+    const index = this.tabsOf(from).indexOf(entry);
+    this.entries.splice(this.entries.indexOf(entry), 1);
+    this.entries.push(entry);
+    entry.space = target;
+    entry.row.hidden = false;
+    (target === PINNED ? this.options.pinned : this.options.list).append(entry.row);
+    if (this.lastTab.get(from) === entry.tab) {
+      const left = this.tabsOf(from);
+      const next = left[Math.min(index, left.length - 1)];
+      if (next) this.lastTab.set(from, next.tab);
+      else this.lastTab.delete(from);
+    }
+    if (entry.tab === this.active || !this.lastTab.has(target)) {
+      this.lastTab.set(target, entry.tab);
+    }
+    this.changed();
+  }
+
+  private placeOf(tab: Tab | null): Place | undefined {
+    return this.entries.find((entry) => entry.tab === tab)?.space;
+  }
+
   // Opens the popover next to the row of `tab`, on the side of the terminal.
   private rename(tab: Tab): void {
     const entry = this.entries.find((e) => e.tab === tab);
@@ -699,6 +794,8 @@ export class Tabs {
     const entry = this.entries.find((x) => x.tab === tab);
     if (!entry) return;
     const { row, space: place } = entry;
+    // The list it is in: the tabs of the space, or the pinned ones.
+    const box = row.parentElement;
     const rows = this.tabsOf(place).map((x) => x.row);
     if (rows.length < 2) return;
     const from = rows.indexOf(row);
@@ -719,7 +816,7 @@ export class Tabs {
         dragging = true;
         closeForm();
         closeMenu();
-        this.options.list.classList.add("reordering");
+        box?.classList.add("reordering");
         row.classList.add("dragging");
       }
       row.style.transform = `translateY(${dy}px)`;
@@ -737,7 +834,7 @@ export class Tabs {
       if (!dragging) return;
       // Without the transition first, the rows would slide back from where
       // they already are.
-      this.options.list.classList.remove("reordering");
+      box?.classList.remove("reordering");
       row.classList.remove("dragging");
       for (const r of rows) r.style.transform = "";
       // A tab that opened or closed meanwhile, or a space that changed,
@@ -745,7 +842,7 @@ export class Tabs {
       const now = this.tabsOf(place);
       if (entry.space !== place || now.length !== rows.length || !now.includes(entry)) return;
       this.place(entry, to);
-      if (place === this.space) this.activate(tab);
+      if (place === this.space || place === PINNED) this.activate(tab);
     };
     row.setPointerCapture(e.pointerId);
     row.addEventListener("pointermove", move);
@@ -796,21 +893,23 @@ export class Tabs {
       return;
     }
 
-    // The session is gone: there is no focus to take away from it.
+    // The session is gone: there is no focus to take away from it. A
+    // pinned tab gives way to what it was shown over.
     this.active = null;
-    const next = this.lastTab.get(place);
+    const back = place === PINNED ? this.space : place;
+    const next = this.lastTab.get(back) ?? this.tabsOf(back)[0]?.tab;
     if (next) this.activate(next);
-    else this.leaveIfEmpty(place);
+    else this.leaveIfEmpty(back);
   }
 
   // A space with no tab left goes away, and the open one before it is
   // shown; with no open space left, nothing is. A closed space has no tab,
   // but its tabs are saved: it stays. With no space, the last tab without
-  // one gone leaves the launcher.
+  // one gone leaves the launcher, unless a pinned tab is in front.
   private leaveIfEmpty(place: Place): void {
-    if (this.tabsOf(place).length > 0) return;
+    if (place === PINNED || this.tabsOf(place).length > 0) return;
     if (place === null) {
-      if (this.space === null) this.show(null);
+      if (this.space === null && this.placeOf(this.active) !== PINNED) this.show(null);
       return;
     }
     if (this.closed.has(place)) return;

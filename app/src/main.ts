@@ -24,6 +24,7 @@ function element(selector: string): HTMLElement {
 
 const sidebar = element("#sidebar");
 const list = element("#tabs");
+const pinned = element("#pinned");
 const newTab = element("#new-tab");
 const toggle = element("#toggle-sidebar");
 // The space that is shown, by name over the tabs and as a dot in the rail.
@@ -89,6 +90,7 @@ function saveSoon(): void {
 const keyboard = attachKeyboard(() => tabs.activeId());
 const tabs = new Tabs({
   list,
+  pinned,
   screens,
   textarea: keyboard,
   font,

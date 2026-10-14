@@ -12,7 +12,8 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 
 ## What works today
 
-- **Tabs** in a sidebar, each with its own session. The sidebar collapses to a rail.
+- **Tabs** in a sidebar, each with its own session, in the order you drag them to. The sidebar collapses to a rail.
+- **Pinned tabs**, seen from every space and started again with the app.
 - **Scrollback, selection and copy**: drag, double click for a word, triple click for a line.
 - **Mouse and focus reporting** for the programs that ask for them (vim, htop, tmux). Hold Shift to select text anyway.
 - **Unicode**: wide characters and combining marks, with glyphs from fallback fonts kept inside their cells.
