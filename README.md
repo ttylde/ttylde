@@ -22,6 +22,8 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 |---|---|
 | `Cmd+T` | New tab |
 | `Cmd+1` … `Cmd+9` | Go to a tab |
+| `Ctrl+1` … `Ctrl+9` | Go to a space, reopening it if it is closed |
+| `Ctrl+Tab`, `Ctrl+Shift+Tab` | Next and previous open space |
 | `Cmd+\` | Collapse or expand the sidebar |
 | `Shift+Enter` | New line without sending, in the programs that support it |
 
@@ -43,6 +45,8 @@ cursor = "#e8e8e2"
 selection = "#3a3f58"
 # ansi = ["#000000", ...]  # the 16 ANSI colors, all of them or none
 ```
+
+Spaces and tabs are kept across restarts in `~/.local/state/ttylde/state.toml` (or `$XDG_STATE_HOME/ttylde/state.toml`). The app writes it: it is not meant to be edited. A file it cannot read is moved aside to `state.toml.broken`, and the app starts as on a first run.
 
 ## Running it
 

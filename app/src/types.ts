@@ -30,6 +30,24 @@ export type Frame = {
 /** Mirror of `Font` in core/src/config.rs. */
 export type Font = { family: string; size: number };
 
+/** Mirror of `Tab` in core/src/state.rs. */
+export type SavedTab = { name: string | null; color: string; icon: string; cwd: string | null };
+
+/** Mirror of `Space` in core/src/state.rs. `closed_at`: `null` if it is open. */
+export type SavedSpace = {
+  id: number;
+  name: string;
+  color: string;
+  folder: string;
+  shell: string | null;
+  closed_at: number | null;
+  shown: number;
+  tabs: SavedTab[];
+};
+
+/** Mirror of `State` in core/src/state.rs. */
+export type SavedState = { shown: number | null; spaces: SavedSpace[] };
+
 /** Mirror of `Status` in core/src/git.rs. */
 export type GitStatus = { branch: string; dirty: boolean };
 

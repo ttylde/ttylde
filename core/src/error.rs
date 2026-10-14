@@ -10,6 +10,8 @@ pub enum Error {
     Io(io::Error),
     /// The config file is not valid; the message says where.
     Config(String),
+    /// The state file is not one the app wrote; the message says why.
+    State(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -20,6 +22,7 @@ impl fmt::Display for Error {
             Error::Pty(e) => write!(f, "pty: {e}"),
             Error::Io(e) => write!(f, "io: {e}"),
             Error::Config(s) => write!(f, "config: {s}"),
+            Error::State(s) => write!(f, "state: {s}"),
         }
     }
 }
@@ -29,7 +32,7 @@ impl std::error::Error for Error {
         match self {
             Error::Pty(e) => Some(e.as_ref()),
             Error::Io(e) => Some(e),
-            Error::Config(_) => None,
+            Error::Config(_) | Error::State(_) => None,
         }
     }
 }

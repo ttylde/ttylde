@@ -11,7 +11,7 @@ import { ago, tabCount } from "./space";
 import { openSpaceSettings } from "./space-settings";
 import { defaultTitle } from "./tab";
 import { Tabs } from "./tabs";
-import type { Font } from "./types";
+import type { Font, SavedState } from "./types";
 
 // The elements of index.html the app is built on: one missing is a bug in
 // the page, not something to recover from.
@@ -68,6 +68,25 @@ await Promise.allSettled(
     document.fonts.load(`${style}${font.size}px ${fontStack(font.family)}`),
   ),
 );
+// The spaces and tabs of last time, and what keeps them for next time:
+// one write a moment after a change, however many changes come at once.
+const saved = await invoke<SavedState>("state_load");
+let saveTimer: number | undefined;
+// Nothing is saved before the tabs of last time are back: until then the
+// app shows less than there is to keep.
+let started = false;
+function saveNow(): Promise<void> {
+  window.clearTimeout(saveTimer);
+  return invoke<void>("state_save", { state: tabs.snapshot() }).catch((error) =>
+    console.error("ttylde: cannot save the state", error),
+  );
+}
+function saveSoon(): void {
+  if (!started) return;
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => void saveNow(), 500);
+}
+
 const keyboard = attachKeyboard(() => tabs.activeId());
 const tabs = new Tabs({
   list,
@@ -78,7 +97,9 @@ const tabs = new Tabs({
   // The frame around the canvas takes the background of what is drawn in it.
   onActiveChange(tab) {
     if (!tab) {
-      void appWindow.close();
+      // What is left is saved before the window goes: no later save is coming.
+      const saving = started ? saveNow() : Promise.resolve();
+      void saving.finally(() => appWindow.close());
       return;
     }
     void appWindow.setTitle(tab.look.name ?? defaultTitle(tab) ?? DEFAULT_TITLE);
@@ -95,6 +116,7 @@ const tabs = new Tabs({
     spaceDot.title = space.name;
     sidebar.style.setProperty("--space-color", space.color);
   },
+  onChange: saveSoon,
 });
 
 // Where what belongs to the space opens: under its name, or beside the rail.
@@ -199,7 +221,9 @@ window.addEventListener(
   { capture: true },
 );
 
-await tabs.open();
+if (!(await tabs.restore(saved))) await tabs.open();
+started = true;
+saveSoon();
 
 // When the terminal area changes size every canvas refits and the core
 // resizes PTY and grid; the full frame that follows redraws everything.
