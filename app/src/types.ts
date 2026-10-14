@@ -51,6 +51,8 @@ export type SavedState = {
   /** When it was written, in milliseconds since 1970. */
   saved_at: number | null;
   spaces: SavedSpace[];
+  /** The tabs pinned outside of every space. */
+  pinned: SavedTab[];
 };
 
 /** Mirror of `Status` in core/src/git.rs. */

@@ -195,7 +195,8 @@ body {
 }
 
 /* The name of what the list below holds. */
-#section {
+#section,
+#pinned-group .section {
   flex: none;
   padding: 0 8px 6px;
   color: var(--muted);
@@ -233,6 +234,24 @@ body {
   border-radius: var(--radius-row);
   font-size: 12px;
   cursor: default;
+}
+
+/* The pinned tabs, under the others: there whatever space is shown. */
+#pinned-group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  margin-top: 14px;
+}
+
+#pinned-group:not(:has(.tab)) {
+  display: none;
+}
+
+#pinned {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 /* While a row is dragged, the others slide to make room for it; the dragged
@@ -657,6 +676,20 @@ body.collapsed #group {
   background: rgba(255, 255, 255, 0.55);
 }
 
+/* In the rail the pinned tabs are a box of their own, under the first. */
+body.collapsed #pinned-group {
+  width: 40px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 4px 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+body.collapsed #pinned {
+  gap: 4px;
+}
+
 body.collapsed #space-dot {
   display: grid;
 }
@@ -695,6 +728,7 @@ body.collapsed .tab-icon .line-icon {
 
 body.collapsed #space-bar,
 body.collapsed #section,
+body.collapsed #pinned-group .section,
 body.collapsed .tab-mark,
 body.collapsed .tab-title,
 body.collapsed .tab-branch,

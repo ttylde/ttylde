@@ -1,5 +1,6 @@
-//! What the app was showing when it closed: the spaces and their tabs, so
-//! that the next start can bring them back.
+//! What the app was showing when it closed: the spaces and their tabs, and
+//! the tabs pinned outside of them, so that the next start can bring them
+//! back.
 //!
 //! The app writes this file and reads it back; the user does not edit it.
 //! It lives apart from the config file, under `$XDG_STATE_HOME`.
@@ -15,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
-/// Every space, open or closed, and the one that was shown.
+/// Every space, open or closed, the one that was shown, and the pinned tabs.
 ///
 /// Fields a file does not have take their default: a file written by an
 /// older version still reads.
@@ -28,6 +29,9 @@ pub struct State {
     /// open then, the time it was last seen.
     pub saved_at: Option<u64>,
     pub spaces: Vec<Space>,
+    /// Tabs that belong to no space and are seen from every one: they start
+    /// again as soon as the app does.
+    pub pinned: Vec<Tab>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -175,6 +179,12 @@ mod tests {
                     }],
                 },
             ],
+            pinned: vec![Tab {
+                name: Some("notes".to_string()),
+                color: "#c2410c".to_string(),
+                icon: "book".to_string(),
+                cwd: Some("/Users/me/notes".to_string()),
+            }],
         }
     }
 
@@ -222,6 +232,7 @@ mod tests {
 
         let state = load(&path).unwrap();
         assert_eq!((state.shown, state.saved_at), (None, None));
+        assert!(state.pinned.is_empty());
         let space = &state.spaces[0];
         assert_eq!((space.shell.clone(), space.closed_at), (None, None));
         assert_eq!((space.shown, space.tabs.len()), (0, 0));
