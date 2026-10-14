@@ -46,6 +46,8 @@ selection = "#3a3f58"
 # ansi = ["#000000", ...]  # the 16 ANSI colors, all of them or none
 ```
 
+The app opens on the launcher: the space you were in, ready to resume with `Enter`, the other closed spaces, and a prompt where typing a command starts a new session. Closing the last open space brings it back. Tabs opened while no space is open belong to none, as in a plain terminal, and are not kept across restarts; opening a space asks whether they come along, and **Move to space…** in the menu of a tab moves it, session alive.
+
 Spaces and tabs are kept across restarts in `~/.local/state/ttylde/state.toml` (or `$XDG_STATE_HOME/ttylde/state.toml`). The app writes it: it is not meant to be edited. A file it cannot read is moved aside to `state.toml.broken`, and the app starts as on a first run.
 
 ## Running it

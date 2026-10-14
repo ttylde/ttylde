@@ -385,6 +385,7 @@ body {
 /* The terminal is a panel laid on the window. Its color is the background
    of what is drawn in it, set from the frames. */
 #terminal {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -412,6 +413,187 @@ body {
 
 .screen[hidden] {
   display: none;
+}
+
+/* What the terminal area shows with no space open. It lies over the
+   canvases, which keep their size for the tab that comes next. */
+#launcher {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: inherit;
+  background: var(--panel);
+  color: var(--ink);
+  font: 13px var(--ui);
+}
+
+#launcher[hidden] {
+  display: none;
+}
+
+.launcher-choice {
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.launcher-spaces {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  padding: 28px 40px 20px;
+  overflow: auto;
+}
+
+.launcher-heading {
+  color: var(--muted);
+  font: 600 10.5px var(--ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.launcher-line {
+  height: 1px;
+  flex: none;
+  background: var(--line);
+}
+
+.launcher-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.launcher-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.launcher-title .dot {
+  width: 11px;
+  height: 11px;
+}
+
+.launcher-name {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.launcher-tabs,
+.launcher-ago,
+.launcher-go,
+.launcher-plus {
+  color: var(--muted);
+}
+
+.launcher-tabs {
+  overflow: hidden;
+  font: 12px / 1.6 var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.launcher-ago {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.launcher-resume {
+  margin-top: 6px;
+  padding: 8px 18px;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: var(--shadow-button);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.launcher-resume:hover {
+  background: #f5f7fc;
+}
+
+.launcher-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: -8px;
+}
+
+.launcher-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: none;
+}
+
+.launcher-row:hover {
+  background: var(--hover);
+}
+
+.launcher-row .launcher-tabs {
+  min-width: 0;
+  font-size: 11.5px;
+}
+
+.launcher-row .launcher-ago {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.launcher-plus {
+  width: 9px;
+  flex: none;
+  text-align: center;
+}
+
+/* The prompt that has the keyboard: typing starts a session. */
+.launcher-prompt {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  font: 13.5px / 1.75 var(--mono);
+  cursor: text;
+}
+
+.launcher-sign {
+  white-space: pre;
+}
+
+.launcher-sign .arrow {
+  color: #1f9a6a;
+}
+
+.launcher-sign b {
+  color: #1f52d6;
+}
+
+.launcher-prompt input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  caret-color: var(--accent);
+}
+
+.launcher-prompt input::placeholder {
+  color: var(--faint);
 }
 
 /* A step toward the opposite: it shows on a light background and on a dark one. */
@@ -822,4 +1004,37 @@ body.collapsed #stage {
   width: 1px;
   height: 1px;
   opacity: 0;
+}
+
+/* Said in the sidebar while nothing is open. */
+#no-space {
+  display: none;
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Nothing open at all: the launcher is in the terminal area. */
+body.empty #no-space {
+  display: block;
+}
+
+body.empty #section,
+body.empty #new-tab,
+body.no-space #close-space,
+body.no-space #space .dot {
+  display: none;
+}
+
+body.no-space #space {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* In the rail, an empty circle where the color of the space would be. */
+body.no-space #space-dot .dot {
+  box-sizing: border-box;
+  border: 1.5px dashed var(--muted);
+  background: none;
 }

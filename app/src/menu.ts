@@ -14,6 +14,8 @@ export type MenuItem = {
   danger?: boolean;
   /** A line above the item sets it apart from those before. */
   line?: boolean;
+  /** Enter chooses it. */
+  primary?: boolean;
   onSelect(): void;
 };
 
@@ -113,6 +115,7 @@ export function openMenu(options: MenuOptions): void {
     menu.append(row);
   }
 
+  const primary = options.items.find((item) => item.primary);
   backdrop.addEventListener("mousedown", dismiss);
   // The focus stays where it was: the menu is used with the pointer.
   menu.addEventListener("mousedown", (e) => e.preventDefault());
@@ -124,6 +127,10 @@ export function openMenu(options: MenuOptions): void {
       e.preventDefault();
       e.stopPropagation();
       if (e.key === "Escape") dismiss();
+      else if (e.key === "Enter" && primary) {
+        dismiss();
+        primary.onSelect();
+      }
     },
     { capture: true, signal },
   );

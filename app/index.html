@@ -19,6 +19,7 @@
         <button id="close-space" type="button" title="Close space (its tabs are kept)">×</button>
       </div>
       <div id="section">Open</div>
+      <div id="no-space">No space open. Pick one on the right, or start typing.</div>
       <div id="group">
         <button id="space-dot" type="button"><span class="dot"></span></button>
         <div id="tabs"></div>
@@ -31,7 +32,7 @@
       </div>
     </aside>
     <main id="stage" data-tauri-drag-region>
-      <div id="terminal"><div id="screens"></div></div>
+      <div id="terminal"><div id="screens"></div><div id="launcher" hidden></div></div>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
