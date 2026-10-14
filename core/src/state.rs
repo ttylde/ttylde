@@ -1,0 +1,286 @@
+//! What the app was showing when it closed: the spaces and their tabs, so
+//! that the next start can bring them back.
+//!
+//! The app writes this file and reads it back; the user does not edit it.
+//! It lives apart from the config file, under `$XDG_STATE_HOME`.
+
+use std::{
+    env,
+    ffi::OsString,
+    fs, io,
+    path::{Path, PathBuf},
+};
+
+use serde::{Deserialize, Serialize};
+
+use crate::error::{Error, Result};
+
+/// Every space, open or closed, and the one that was shown.
+///
+/// Fields a file does not have take their default: a file written by an
+/// older version still reads.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct State {
+    /// Id of the space that was shown; `None` if none was.
+    pub shown: Option<u32>,
+    pub spaces: Vec<Space>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Space {
+    pub id: u32,
+    pub name: String,
+    pub color: String,
+    /// Where its new tabs start, as the user typed it: `~` is the home.
+    pub folder: String,
+    /// `None`: the shell of the system.
+    #[serde(default)]
+    pub shell: Option<String>,
+    /// When it was closed, in milliseconds since 1970; `None`: it is open.
+    #[serde(default)]
+    pub closed_at: Option<u64>,
+    /// Position of the tab that was shown among `tabs`.
+    #[serde(default)]
+    pub shown: usize,
+    #[serde(default)]
+    pub tabs: Vec<Tab>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Tab {
+    /// The name the user gave it; `None`: it takes the one of its folder.
+    #[serde(default)]
+    pub name: Option<String>,
+    pub color: String,
+    pub icon: String,
+    /// The folder it was in; `None` if it never said.
+    #[serde(default)]
+    pub cwd: Option<String>,
+}
+
+/// Reads the file at `path`. A missing file is not an error: it means
+/// nothing was saved yet, and gives an empty state. A file that is there
+/// but is not a state is `Error::State`.
+pub fn load(path: &Path) -> Result<State> {
+    match fs::read_to_string(path) {
+        Ok(text) => toml::from_str(&text).map_err(|e| Error::State(e.to_string())),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(State::default()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Writes `state` to `path`, making its folder if needed. The text goes to
+/// a temporary file next to it first, then takes the place of the old one:
+/// a crash halfway leaves the old file whole.
+pub fn save(state: &State, path: &Path) -> Result<()> {
+    if let Some(folder) = path.parent() {
+        fs::create_dir_all(folder)?;
+    }
+    let text = toml::to_string(state).map_err(|e| Error::State(e.to_string()))?;
+
+    // Next to the file, not in `/tmp`: a rename within one folder is atomic.
+    let temporary = with_suffix(path, ".tmp");
+    fs::write(&temporary, text)?;
+    fs::rename(&temporary, path)?;
+    Ok(())
+}
+
+/// Moves a file that could not be read out of the way, to `<name>.broken`,
+/// so that the next save does not write over what is left of it.
+pub fn set_aside(path: &Path) -> io::Result<()> {
+    fs::rename(path, with_suffix(path, ".broken"))
+}
+
+// `path` with `suffix` after its whole name: `state.toml.tmp`.
+fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
+/// Where the state file lives: under `$XDG_STATE_HOME`, or `~/.local/state`.
+pub fn default_path() -> Option<PathBuf> {
+    path_from(env::var_os("XDG_STATE_HOME"), env::var_os("HOME"))
+}
+
+// An empty variable counts as unset, as the XDG specification asks.
+fn path_from(xdg: Option<OsString>, home: Option<OsString>) -> Option<PathBuf> {
+    let base = match xdg.filter(|dir| !dir.is_empty()) {
+        Some(dir) => PathBuf::from(dir),
+        None => PathBuf::from(home.filter(|dir| !dir.is_empty())?)
+            .join(".local")
+            .join("state"),
+    };
+
+    Some(base.join("ttylde").join("state.toml"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A folder of its own for each test: they run at the same time.
+    fn temp_folder(name: &str) -> PathBuf {
+        let folder = env::temp_dir().join(format!("ttylde-state-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir_all(&folder).unwrap();
+        folder
+    }
+
+    fn sample() -> State {
+        State {
+            shown: Some(2),
+            spaces: vec![
+                Space {
+                    id: 1,
+                    name: "Work".to_string(),
+                    color: "#2466ff".to_string(),
+                    folder: "~/work".to_string(),
+                    shell: Some("fish".to_string()),
+                    closed_at: Some(1_790_000_000_000),
+                    shown: 1,
+                    tabs: vec![
+                        Tab {
+                            name: Some("api".to_string()),
+                            color: "#1f9a6a".to_string(),
+                            icon: "server".to_string(),
+                            cwd: Some("/Users/me/work/api".to_string()),
+                        },
+                        Tab {
+                            name: None,
+                            color: "#5f6f68".to_string(),
+                            icon: "terminal".to_string(),
+                            cwd: None,
+                        },
+                    ],
+                },
+                Space {
+                    id: 2,
+                    name: "Space 2".to_string(),
+                    color: "#7fb0ff".to_string(),
+                    folder: "~".to_string(),
+                    shell: None,
+                    closed_at: None,
+                    shown: 0,
+                    tabs: vec![Tab {
+                        name: None,
+                        color: "#5f6f68".to_string(),
+                        icon: "terminal".to_string(),
+                        cwd: Some("/tmp".to_string()),
+                    }],
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn what_is_saved_is_read_back() {
+        let path = temp_folder("round").join("state.toml");
+        save(&sample(), &path).unwrap();
+        assert_eq!(load(&path).unwrap(), sample());
+    }
+
+    #[test]
+    fn a_missing_file_is_an_empty_state() {
+        let path = temp_folder("missing").join("state.toml");
+        assert_eq!(load(&path).unwrap(), State::default());
+    }
+
+    #[test]
+    fn a_broken_file_is_a_state_error() {
+        let path = temp_folder("broken").join("state.toml");
+        fs::write(&path, "spaces = [[[").unwrap();
+        assert!(matches!(load(&path), Err(Error::State(_))));
+
+        // Well-formed TOML, but not a state: a space with no name.
+        fs::write(
+            &path,
+            "[[spaces]]\nid = 1\ncolor = \"#2466ff\"\nfolder = \"~\"",
+        )
+        .unwrap();
+        assert!(matches!(load(&path), Err(Error::State(_))));
+    }
+
+    // A path that is there but cannot be read as a file is not "missing".
+    #[test]
+    fn an_unreadable_path_is_an_io_error() {
+        let folder = temp_folder("unreadable");
+        assert!(matches!(load(&folder), Err(Error::Io(_))));
+    }
+
+    // A file from an older version, without the fields added since.
+    #[test]
+    fn fields_left_out_take_their_default() {
+        let path = temp_folder("older").join("state.toml");
+        let text = "[[spaces]]\nid = 1\nname = \"Work\"\ncolor = \"#2466ff\"\nfolder = \"~\"\n";
+        fs::write(&path, text).unwrap();
+
+        let state = load(&path).unwrap();
+        assert_eq!(state.shown, None);
+        let space = &state.spaces[0];
+        assert_eq!((space.shell.clone(), space.closed_at), (None, None));
+        assert_eq!((space.shown, space.tabs.len()), (0, 0));
+    }
+
+    #[test]
+    fn saving_makes_the_folders_it_needs() {
+        let path = temp_folder("folders")
+            .join("ttylde")
+            .join("deep")
+            .join("state.toml");
+        save(&sample(), &path).unwrap();
+        assert!(path.is_file());
+    }
+
+    #[test]
+    fn saving_again_replaces_the_file_and_leaves_nothing_else() {
+        let folder = temp_folder("again");
+        let path = folder.join("state.toml");
+        save(&sample(), &path).unwrap();
+        save(&State::default(), &path).unwrap();
+
+        assert_eq!(load(&path).unwrap(), State::default());
+        let names: Vec<_> = fs::read_dir(&folder)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names, vec![OsString::from("state.toml")]);
+    }
+
+    #[test]
+    fn a_file_set_aside_keeps_its_text_under_another_name() {
+        let folder = temp_folder("aside");
+        let path = folder.join("state.toml");
+        fs::write(&path, "broken").unwrap();
+        set_aside(&path).unwrap();
+
+        assert!(!path.exists());
+        assert_eq!(
+            fs::read_to_string(folder.join("state.toml.broken")).unwrap(),
+            "broken"
+        );
+    }
+
+    #[test]
+    fn the_path_prefers_xdg_state_home() {
+        let path = path_from(Some("/xdg".into()), Some("/home/me".into()));
+        assert_eq!(path, Some(PathBuf::from("/xdg/ttylde/state.toml")));
+    }
+
+    #[test]
+    fn without_xdg_the_path_is_under_the_home() {
+        let expected = Some(PathBuf::from("/home/me/.local/state/ttylde/state.toml"));
+        assert_eq!(path_from(None, Some("/home/me".into())), expected);
+        assert_eq!(
+            path_from(Some("".into()), Some("/home/me".into())),
+            expected
+        );
+    }
+
+    #[test]
+    fn without_a_home_there_is_no_path() {
+        assert_eq!(path_from(None, None), None);
+        assert_eq!(path_from(None, Some("".into())), None);
+    }
+}

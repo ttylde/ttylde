@@ -11,4 +11,5 @@ pub mod git;
 pub mod input;
 pub mod pty;
 pub mod session;
+pub mod state;
 pub mod theme;

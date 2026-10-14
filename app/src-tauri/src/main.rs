@@ -1,6 +1,7 @@
 // Avoids the console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod saved;
 mod sessions;
 
 use sessions::Sessions;
@@ -33,6 +34,8 @@ fn main() {
             sessions::session_selection_text,
             sessions::session_close,
             sessions::session_focus,
+            saved::state_load,
+            saved::state_save,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Ttylde");

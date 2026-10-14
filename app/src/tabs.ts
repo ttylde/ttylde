@@ -14,7 +14,7 @@ import {
   type TabHandlers,
   type TabStart,
 } from "./tab";
-import type { Font } from "./types";
+import type { Font, SavedState } from "./types";
 
 /** Shown in the sidebar for a tab with no title and no known folder. */
 const UNTITLED = "shell";
@@ -58,6 +58,8 @@ export type TabsOptions = {
    * closed. `closable`: there is an open space to show instead of it.
    */
   onSpaceChange(space: Space, closable: boolean): void;
+  /** Something worth keeping across a restart changed: see `snapshot`. */
+  onChange(): void;
 };
 
 /**
@@ -82,6 +84,8 @@ export class Tabs {
   // The tab the popover is editing, and the one a menu is open on.
   private renaming: Tab | null = null;
   private inMenu: Tab | null = null;
+  // While the spaces of last time come back, nothing is worth saving yet.
+  private restoring = false;
 
   constructor(private options: TabsOptions) {
     this.announce();
@@ -103,6 +107,74 @@ export class Tabs {
         closedAt: saved?.closedAt ?? null,
       };
     });
+  }
+
+  /** Every space and tab as the state file keeps them. */
+  snapshot(): SavedState {
+    return {
+      shown: this.space.id,
+      spaces: this.spaces.map((space) => {
+        const saved = this.closed.get(space);
+        const { tabs, shown } = saved ?? this.keep(space);
+        return {
+          ...space,
+          closed_at: saved?.closedAt ?? null,
+          shown,
+          tabs: tabs.map(({ look, cwd }) => ({ ...look, cwd })),
+        };
+      }),
+    };
+  }
+
+  /**
+   * Brings back the spaces of `state`: the open ones with their tabs, each
+   * started again in its folder, the closed ones in the menu. `false` if
+   * there was no tab to bring back: the app starts with a tab of its own.
+   */
+  async restore(state: SavedState): Promise<boolean> {
+    // An open space with no tab is one the last tab left: it is gone.
+    const kept = state.spaces.filter((saved) => saved.closed_at !== null || saved.tabs.length > 0);
+    if (kept.length === 0) return false;
+
+    this.restoring = true;
+    this.spaces = kept.map(({ id, name, color, folder, shell }) => ({
+      id,
+      name,
+      color,
+      folder,
+      shell,
+    }));
+    // Every one starts closed: opening is reopening what was saved.
+    kept.forEach((saved, index) => {
+      this.closed.set(this.spaces[index], {
+        tabs: saved.tabs.map(({ cwd, ...look }) => ({ look, cwd })),
+        shown: saved.shown,
+        closedAt: saved.closed_at ?? 0,
+      });
+    });
+    const open = this.spaces.filter((_, index) => kept[index].closed_at === null);
+    try {
+      // The one that was shown first, so that it is the first to be seen.
+      const first = open.find((space) => space.id === state.shown) ?? open[0];
+      if (first) await this.reopen(first);
+      for (const space of open) {
+        if (space !== first) await this.reopen(space, false);
+      }
+    } finally {
+      this.restoring = false;
+    }
+
+    // Not one of them came back: a space of its own to start in.
+    const left = this.openSpaces();
+    if (left.length === 0) {
+      const space = createSpace(this.spaces);
+      this.spaces.push(space);
+      this.show(space);
+      return false;
+    }
+    if (!this.active) this.show(left[0]);
+    this.announce();
+    return true;
   }
 
   /** Opens a tab at the end of the space that is shown, and shows it. */
@@ -220,15 +292,7 @@ export class Tabs {
     const next = this.neighbour(space);
     if (!next) return;
     const entries = this.tabsOf(space);
-    const last = this.lastTab.get(space);
-    this.closed.set(space, {
-      tabs: entries.map(({ tab }) => ({ look: tab.look, cwd: tab.cwd })),
-      shown: Math.max(
-        0,
-        entries.findIndex((entry) => entry.tab === last),
-      ),
-      closedAt: Date.now(),
-    });
+    this.closed.set(space, this.keep(space));
     this.show(next);
     for (const { tab } of entries) this.close(tab);
   }
@@ -280,17 +344,37 @@ export class Tabs {
     return open[index - 1] ?? open[index + 1];
   }
 
-  private announce(): void {
-    this.options.onSpaceChange(this.space, this.openSpaces().length > 1);
+  // What is kept of an open space when it closes: its tabs as they are now.
+  private keep(space: Space): Saved {
+    const entries = this.tabsOf(space);
+    const last = this.lastTab.get(space);
+    return {
+      tabs: entries.map(({ tab }) => ({ look: tab.look, cwd: tab.cwd })),
+      shown: Math.max(
+        0,
+        entries.findIndex((entry) => entry.tab === last),
+      ),
+      closedAt: Date.now(),
+    };
   }
 
-  // Shows a closed space and opens its tabs again, each in the folder it
-  // was in and with the look it had, on the one that was shown.
-  private async reopen(space: Space): Promise<void> {
+  private announce(): void {
+    this.options.onSpaceChange(this.space, this.openSpaces().length > 1);
+    this.changed();
+  }
+
+  private changed(): void {
+    if (!this.restoring) this.options.onChange();
+  }
+
+  // Opens the tabs of a closed space again, each in the folder it was in
+  // and with the look it had, on the one that was shown; `show`: the space
+  // is shown while they open.
+  private async reopen(space: Space, show = true): Promise<void> {
     const saved = this.closed.get(space);
     if (!saved) return;
     this.closed.delete(space);
-    this.show(space);
+    if (show) this.show(space);
     for (const { look, cwd } of saved.tabs) {
       try {
         await this.openIn(space, { cwd: cwd ?? space.folder, shell: space.shell }, look);
@@ -300,6 +384,7 @@ export class Tabs {
     }
     const shown = this.tabsOf(space)[saved.shown]?.tab;
     if (shown && space === this.space) this.activate(shown);
+    else if (shown) this.lastTab.set(space, shown);
     // Not one of them started: a space with no tab goes away.
     this.leaveIfEmpty(space);
   }
@@ -329,6 +414,7 @@ export class Tabs {
       if (isActive) this.lastTab.set(entry.space, tab);
     }
     this.options.onActiveChange(tab);
+    this.changed();
   }
 
   private retitle(tab: Tab): void {
@@ -346,6 +432,7 @@ export class Tabs {
       .filter((line) => line !== null)
       .join("\n");
     if (tab === this.active) this.options.onActiveChange(tab);
+    this.changed();
   }
 
   // Where popovers open: past the edge of the sidebar, over the terminal.
@@ -416,6 +503,7 @@ export class Tabs {
     this.entries.splice(this.entries.indexOf(entry), 1);
     entry.row.remove();
     closeTab(tab);
+    this.changed();
 
     const left = this.tabsOf(space);
     if (this.lastTab.get(space) === tab) {
@@ -443,7 +531,9 @@ export class Tabs {
     const index = this.spaces.indexOf(space);
     if (index < 0) return;
     const next = this.neighbour(space);
-    if (!next) {
+    // While restoring, the others are still on their way: `restore` sees to
+    // a space with no tab being the only one.
+    if (!next && !this.restoring) {
       this.options.onActiveChange(null);
       return;
     }
@@ -451,7 +541,7 @@ export class Tabs {
     this.spaces.splice(index, 1);
     this.lastTab.delete(space);
     // The one that was shown is gone: another one takes its place.
-    if (space === this.space) this.show(next);
+    if (space === this.space && next) this.show(next);
     else this.announce();
   }
 }
