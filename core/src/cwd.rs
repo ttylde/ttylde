@@ -4,7 +4,7 @@
 //! the path percent-encoded. When it does not, the system knows the folder
 //! of every process: `of_process` asks it.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// What an OSC 7 says: a folder, and the machine it is on.
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +51,20 @@ fn percent_decode(uri: &str) -> Option<Vec<u8>> {
     }
 
     Some(output)
+}
+
+/// A folder as someone types it, with `~` standing for `home`: `~` alone,
+/// or `~/` followed by a path. Anything else is taken as it is.
+pub fn expand_home(path: &str, home: &Path) -> PathBuf {
+    if path == "~" {
+        return home.to_path_buf();
+    }
+
+    if let Some(rest) = path.strip_prefix("~/") {
+        return home.join(rest);
+    }
+
+    PathBuf::from(path)
 }
 
 /// The folder the process `pid` is working in, as the system reports it.
@@ -415,5 +429,34 @@ mod tests {
 
         assert_eq!(tracker.announce(at("mac.local", "/a")), None);
         assert!(!tracker.needs_probe());
+    }
+
+    fn expanded(path: &str) -> PathBuf {
+        expand_home(path, Path::new("/Users/me"))
+    }
+
+    #[test]
+    fn a_tilde_alone_is_home() {
+        assert_eq!(expanded("~"), PathBuf::from("/Users/me"));
+    }
+
+    #[test]
+    fn a_tilde_and_a_slash_start_from_home() {
+        assert_eq!(expanded("~/work/api"), PathBuf::from("/Users/me/work/api"));
+        assert_eq!(expanded("~/"), PathBuf::from("/Users/me"));
+    }
+
+    #[test]
+    fn other_paths_are_left_alone() {
+        assert_eq!(expanded("/tmp"), PathBuf::from("/tmp"));
+        assert_eq!(expanded("work"), PathBuf::from("work"));
+    }
+
+    // `~name` is the home of someone else, which is not ours to work out,
+    // and a tilde in the middle is a character like any other.
+    #[test]
+    fn only_a_tilde_at_the_start_and_alone_counts() {
+        assert_eq!(expanded("~other/work"), PathBuf::from("~other/work"));
+        assert_eq!(expanded("/tmp/~/x"), PathBuf::from("/tmp/~/x"));
     }
 }

@@ -64,4 +64,36 @@ describe("actionOf", () => {
     expect(actionOf(stroke({ key: "c", code: "KeyC", metaKey: true }), true)).toBeNull();
     expect(actionOf(stroke({ key: "0", code: "Digit0", metaKey: true }), true)).toBeNull();
   });
+
+  // Spaces are on Ctrl on every platform.
+  test("Ctrl+1..9 select a space", () => {
+    for (const mac of [true, false]) {
+      const first = actionOf(stroke({ key: "1", code: "Digit1", ctrlKey: true }), mac);
+      const ninth = actionOf(stroke({ key: "9", code: "Digit9", ctrlKey: true }), mac);
+      expect(first).toEqual({ type: "select-space", index: 0 });
+      expect(ninth).toEqual({ type: "select-space", index: 8 });
+    }
+  });
+
+  test("Ctrl+Tab goes to the next space, with Shift to the one before", () => {
+    const next = actionOf(stroke({ key: "Tab", code: "Tab", ctrlKey: true }), true);
+    const back = actionOf(stroke({ key: "Tab", code: "Tab", ctrlKey: true, shiftKey: true }), true);
+    expect(next).toEqual({ type: "step-space", step: 1 });
+    expect(back).toEqual({ type: "step-space", step: -1 });
+  });
+
+  // Where Ctrl+Shift is the modifier of the app, the digits stay with the tabs.
+  test("Ctrl+Shift+digit is still a tab off macOS", () => {
+    const action = actionOf(
+      stroke({ key: "!", code: "Digit1", ctrlKey: true, shiftKey: true }),
+      false,
+    );
+    expect(action).toEqual({ type: "select-tab", index: 0 });
+  });
+
+  // Tab alone, and Ctrl with a letter, belong to the terminal.
+  test("plain Tab and Ctrl+letter are not shortcuts", () => {
+    expect(actionOf(stroke({ key: "Tab", code: "Tab" }), true)).toBeNull();
+    expect(actionOf(stroke({ key: "c", code: "KeyC", ctrlKey: true }), true)).toBeNull();
+  });
 });

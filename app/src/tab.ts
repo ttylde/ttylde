@@ -29,6 +29,14 @@ export type Tab = {
   abort: AbortController;
 };
 
+/** Where a session starts, and with what. */
+export type TabStart = {
+  /** Folder, `~` for the home; the home when it does not exist. */
+  cwd: string;
+  /** The shell to run, `null` for the one of the system. */
+  shell: string | null;
+};
+
 export type TabHandlers = {
   /** The title, the folder or its repository changed. */
   onTitle(tab: Tab): void;
@@ -47,6 +55,7 @@ export async function openTab(
   container: HTMLElement,
   textarea: HTMLTextAreaElement,
   font: Font,
+  start: TabStart,
   handlers: TabHandlers,
 ): Promise<Tab> {
   const canvas = document.createElement("canvas");
@@ -108,7 +117,7 @@ export async function openTab(
   };
 
   try {
-    tab.id = await invoke<number>("session_open", { ...size, onEvent });
+    tab.id = await invoke<number>("session_open", { ...size, ...start, onEvent });
   } catch (error) {
     canvas.remove();
     throw error;

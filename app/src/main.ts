@@ -1,12 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import { isFormOpen } from "./form";
 import { SIDEBAR_ICON } from "./icons";
 import { attachKeyboard } from "./input";
-import { isMenuOpen } from "./menu";
-import { isRenaming } from "./rename";
+import { isMenuOpen, openMenu } from "./menu";
 import { fontStack } from "./renderer";
 import { actionOf, NEW_TAB_HINT } from "./shortcuts";
+import { ago, tabCount } from "./space";
+import { openSpaceSettings } from "./space-settings";
 import { defaultTitle } from "./tab";
 import { Tabs } from "./tabs";
 import type { Font } from "./types";
@@ -23,6 +25,10 @@ const sidebar = element("#sidebar");
 const list = element("#tabs");
 const newTab = element("#new-tab");
 const toggle = element("#toggle-sidebar");
+// The space that is shown, by name over the tabs and as a dot in the rail.
+const spaceName = element("#space");
+const spaceDot = element("#space-dot");
+const closeSpace = element("#close-space");
 const terminal = element("#terminal");
 const screens = element("#screens");
 const appWindow = getCurrentWindow();
@@ -79,13 +85,81 @@ const tabs = new Tabs({
     if (tab.background !== null) {
       terminal.style.background = `#${tab.background.toString(16).padStart(6, "0")}`;
     }
-    keyboard.focus();
+    // A form edits the tab while it changes: the keys stay in the form.
+    if (!isFormOpen()) keyboard.focus();
+  },
+  onSpaceChange(space, closable) {
+    element("#space .name").textContent = space.name;
+    closeSpace.hidden = !closable;
+    spaceName.title = space.name;
+    spaceDot.title = space.name;
+    sidebar.style.setProperty("--space-color", space.color);
   },
 });
+
+// Where what belongs to the space opens: under its name, or beside the rail.
+function underSpace(): { left: number; top: number; width: number } {
+  const collapsed = isCollapsed();
+  const anchor = (collapsed ? spaceDot : spaceName).getBoundingClientRect();
+  const bounds = sidebar.getBoundingClientRect();
+  return {
+    left: collapsed ? bounds.right + 6 : bounds.left + 10,
+    top: collapsed ? anchor.top : anchor.bottom + 6,
+    width: collapsed ? 240 : bounds.width - 20,
+  };
+}
+
+// The settings of the space that is shown.
+function openSettings(): void {
+  const current = tabs.spaceList().find((info) => info.current);
+  if (!current) return;
+  const { left, top } = underSpace();
+  openSpaceSettings({
+    space: current.space,
+    tabs: current.tabs,
+    left,
+    top,
+    onSave: (changes) => tabs.editSpace(changes),
+    onDelete: () => tabs.deleteSpace(),
+    onClose: () => keyboard.focus(),
+  });
+}
+
+// The menu of the spaces.
+function openSpaceMenu(): void {
+  spaceName.classList.add("open");
+  openMenu({
+    ...underSpace(),
+    items: [
+      ...tabs.spaceList().map(({ space, tabs: count, current, closedAt }, index) => ({
+        label: space.name,
+        // The color is one of the palette, never text typed by someone.
+        icon: `<span class="dot" style="background:${space.color}"></span>`,
+        meta: closedAt === null ? tabCount(count) : `closed · ${ago(closedAt, Date.now())}`,
+        hint: index < 9 ? `⌃${index + 1}` : undefined,
+        current,
+        quiet: closedAt !== null,
+        onSelect: () => tabs.selectSpace(index),
+      })),
+      {
+        label: "New space",
+        icon: "+",
+        quiet: true,
+        line: true,
+        onSelect: () => void tabs.newSpace(),
+      },
+      { label: "Space settings…", icon: "›", quiet: true, onSelect: openSettings },
+    ],
+    onClose: () => spaceName.classList.remove("open"),
+  });
+}
 
 // Clicks in the sidebar must not take the focus away from the keyboard.
 sidebar.addEventListener("mousedown", (e) => e.preventDefault());
 newTab.addEventListener("click", () => void tabs.open());
+spaceName.addEventListener("click", openSpaceMenu);
+spaceDot.addEventListener("click", openSpaceMenu);
+closeSpace.addEventListener("click", () => tabs.closeSpace());
 // The terminal area changes size: the observer below refits the tabs.
 toggle.addEventListener("click", () => setCollapsed(!isCollapsed()));
 
@@ -99,7 +173,7 @@ window.addEventListener(
   (e) => {
     // While a tab is being renamed the keys are for its name, and a menu
     // takes them for itself.
-    if (isRenaming() || isMenuOpen()) return;
+    if (isFormOpen() || isMenuOpen()) return;
     const action = actionOf(e);
     if (!action) return;
     e.preventDefault();
@@ -110,6 +184,12 @@ window.addEventListener(
         break;
       case "select-tab":
         tabs.select(action.index);
+        break;
+      case "select-space":
+        tabs.selectSpace(action.index);
+        break;
+      case "step-space":
+        tabs.stepSpace(action.step);
         break;
       case "toggle-sidebar":
         setCollapsed(!isCollapsed());

@@ -1,25 +1,37 @@
-import { popoverTop } from "./look";
-
 export type MenuItem = {
   label: string;
-  /** SVG markup or a character, shown before the label. */
+  /** Markup written in this app (an icon, a dot) or a character, before the label. */
   icon: string;
+  /** Said in small after the label: how many, how long ago. */
+  meta?: string;
+  /** The keys that do the same, at the end of the row. */
+  hint?: string;
+  /** The one the menu was opened from. */
+  current?: boolean;
+  /** Less to the eye than the choices above it. */
+  quiet?: boolean;
   /** Drawn in red: the item takes something away. */
   danger?: boolean;
+  /** A line above the item sets it apart from those before. */
+  line?: boolean;
   onSelect(): void;
 };
 
 export type MenuOptions = {
   /** What the menu is about: shown at its top. */
-  title: string;
-  /** The row the menu belongs to: it opens next to it. */
-  row: DOMRect;
-  /** Left edge of the menu, in CSS pixels. */
+  title?: string;
+  /** Where the menu opens, in CSS pixels; it moves up if it would not fit. */
   left: number;
+  top: number;
+  /** In CSS pixels; a width of its own when left out. */
+  width?: number;
   items: MenuItem[];
   /** The menu is gone, with or without a choice. */
   onClose(): void;
 };
+
+/** Distance between a menu and the edges of the window. */
+const MARGIN = 8;
 
 // One menu at a time: opening another closes the one that is there.
 let close: (() => void) | null = null;
@@ -34,7 +46,7 @@ export function closeMenu(): void {
   close?.();
 }
 
-/** Opens a menu of actions on a row of the sidebar. */
+/** Opens a menu of things to choose from. */
 export function openMenu(options: MenuOptions): void {
   closeMenu();
   const listeners = new AbortController();
@@ -45,11 +57,14 @@ export function openMenu(options: MenuOptions): void {
   backdrop.className = "popover-backdrop";
   const menu = document.createElement("div");
   menu.className = "popover menu";
+  if (options.width !== undefined) menu.style.width = `${options.width}px`;
 
-  const title = document.createElement("div");
-  title.className = "menu-title";
-  title.textContent = options.title;
-  menu.append(title);
+  if (options.title !== undefined) {
+    const title = document.createElement("div");
+    title.className = "menu-title";
+    title.textContent = options.title;
+    menu.append(title);
+  }
 
   function dismiss(): void {
     close = null;
@@ -60,19 +75,37 @@ export function openMenu(options: MenuOptions): void {
   }
 
   for (const item of options.items) {
-    if (item.danger) {
+    if (item.line) {
       const line = document.createElement("div");
       line.className = "menu-line";
       menu.append(line);
     }
     const row = document.createElement("button");
     row.type = "button";
-    row.className = item.danger ? "menu-item danger" : "menu-item";
+    row.className = "menu-item";
+    row.classList.toggle("current", item.current ?? false);
+    row.classList.toggle("quiet", item.quiet ?? false);
+    row.classList.toggle("danger", item.danger ?? false);
+
     const icon = document.createElement("span");
     icon.className = "menu-icon";
     // Markup written in this app, never text that comes from outside.
     icon.innerHTML = item.icon;
-    row.append(icon, item.label);
+    const label = document.createElement("span");
+    label.className = "menu-label";
+    label.textContent = item.label;
+    row.append(icon, label);
+    for (const [className, text] of [
+      ["menu-meta", item.meta],
+      ["menu-hint", item.hint],
+    ]) {
+      if (text === undefined) continue;
+      const part = document.createElement("span");
+      part.className = className ?? "";
+      part.textContent = text;
+      row.append(part);
+    }
+
     row.addEventListener("click", () => {
       dismiss();
       item.onSelect();
@@ -96,7 +129,8 @@ export function openMenu(options: MenuOptions): void {
   );
 
   document.body.append(backdrop, menu);
+  const lowest = window.innerHeight - menu.offsetHeight - MARGIN;
   menu.style.left = `${options.left}px`;
-  menu.style.top = `${popoverTop(options.row.top, menu.offsetHeight, window.innerHeight, 6)}px`;
+  menu.style.top = `${Math.max(MARGIN, Math.min(options.top, lowest))}px`;
   close = dismiss;
 }
