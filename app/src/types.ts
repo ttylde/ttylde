@@ -46,7 +46,12 @@ export type SavedSpace = {
 };
 
 /** Mirror of `State` in core/src/state.rs. */
-export type SavedState = { shown: number | null; spaces: SavedSpace[] };
+export type SavedState = {
+  shown: number | null;
+  /** When it was written, in milliseconds since 1970. */
+  saved_at: number | null;
+  spaces: SavedSpace[];
+};
 
 /** Mirror of `Status` in core/src/git.rs. */
 export type GitStatus = { branch: string; dirty: boolean };

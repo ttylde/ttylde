@@ -24,6 +24,9 @@ use crate::error::{Error, Result};
 pub struct State {
     /// Id of the space that was shown; `None` if none was.
     pub shown: Option<u32>,
+    /// When the app wrote it, in milliseconds since 1970: for a space still
+    /// open then, the time it was last seen.
+    pub saved_at: Option<u64>,
     pub spaces: Vec<Space>,
 }
 
@@ -131,6 +134,7 @@ mod tests {
     fn sample() -> State {
         State {
             shown: Some(2),
+            saved_at: Some(1_790_000_100_000),
             spaces: vec![
                 Space {
                     id: 1,
@@ -217,7 +221,7 @@ mod tests {
         fs::write(&path, text).unwrap();
 
         let state = load(&path).unwrap();
-        assert_eq!(state.shown, None);
+        assert_eq!((state.shown, state.saved_at), (None, None));
         let space = &state.spaces[0];
         assert_eq!((space.shell.clone(), space.closed_at), (None, None));
         assert_eq!((space.shown, space.tabs.len()), (0, 0));

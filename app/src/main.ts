@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isFormOpen } from "./form";
 import { SIDEBAR_ICON } from "./icons";
 import { attachKeyboard } from "./input";
+import { Launcher } from "./launcher";
 import { isMenuOpen, openMenu } from "./menu";
 import { fontStack } from "./renderer";
 import { actionOf, NEW_TAB_HINT } from "./shortcuts";
@@ -72,19 +73,17 @@ await Promise.allSettled(
 // one write a moment after a change, however many changes come at once.
 const saved = await invoke<SavedState>("state_load");
 let saveTimer: number | undefined;
-// Nothing is saved before the tabs of last time are back: until then the
-// app shows less than there is to keep.
+// Nothing is saved before the spaces of last time are read back: until
+// then the app has less than there is to keep.
 let started = false;
-function saveNow(): Promise<void> {
-  window.clearTimeout(saveTimer);
-  return invoke<void>("state_save", { state: tabs.snapshot() }).catch((error) =>
-    console.error("ttylde: cannot save the state", error),
-  );
-}
 function saveSoon(): void {
   if (!started) return;
   window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => void saveNow(), 500);
+  saveTimer = window.setTimeout(() => {
+    invoke<void>("state_save", { state: tabs.snapshot() }).catch((error) =>
+      console.error("ttylde: cannot save the state", error),
+    );
+  }, 500);
 }
 
 const keyboard = attachKeyboard(() => tabs.activeId());
@@ -93,15 +92,17 @@ const tabs = new Tabs({
   screens,
   textarea: keyboard,
   font,
-  // The window follows the visible tab, and goes away with the last one.
-  // The frame around the canvas takes the background of what is drawn in it.
+  // The window follows the visible tab. The frame around the canvas takes
+  // the background of what is drawn in it. With no tab, the launcher.
   onActiveChange(tab) {
+    document.body.classList.toggle("empty", tab === null);
     if (!tab) {
-      // What is left is saved before the window goes: no later save is coming.
-      const saving = started ? saveNow() : Promise.resolve();
-      void saving.finally(() => appWindow.close());
+      void appWindow.setTitle(DEFAULT_TITLE);
+      terminal.style.background = "";
+      launcher.show(tabs.closedSpaces());
       return;
     }
+    launcher.hide();
     void appWindow.setTitle(tab.look.name ?? defaultTitle(tab) ?? DEFAULT_TITLE);
     if (tab.background !== null) {
       terminal.style.background = `#${tab.background.toString(16).padStart(6, "0")}`;
@@ -109,15 +110,51 @@ const tabs = new Tabs({
     // A form edits the tab while it changes: the keys stay in the form.
     if (!isFormOpen()) keyboard.focus();
   },
-  onSpaceChange(space, closable) {
-    element("#space .name").textContent = space.name;
-    closeSpace.hidden = !closable;
-    spaceName.title = space.name;
-    spaceDot.title = space.name;
-    sidebar.style.setProperty("--space-color", space.color);
+  onSpaceChange(space) {
+    document.body.classList.toggle("no-space", space === null);
+    const name = space?.name ?? "Open a space";
+    element("#space .name").textContent = name;
+    spaceName.title = name;
+    spaceDot.title = space?.name ?? "No space open";
+    if (space) sidebar.style.setProperty("--space-color", space.color);
   },
+  // Next to the space menu, where the space was asked for.
+  ask: (count, into) =>
+    new Promise((resolve) => {
+      const them = count === 1 ? "it" : "them";
+      openMenu({
+        ...underSpace(),
+        title: count === 1 ? "1 tab without a space" : `${count} tabs without a space`,
+        items: [
+          {
+            label: `Bring ${them} into ${into}`,
+            icon: "↵",
+            primary: true,
+            onSelect: () => resolve("bring"),
+          },
+          { label: `Close ${them}`, icon: "×", danger: true, onSelect: () => resolve("close") },
+        ],
+        // A choice comes right after the menu closes: only without one is
+        // the answer "no".
+        onClose: () => queueMicrotask(() => resolve(null)),
+      });
+    }),
   onChange: saveSoon,
 });
+
+const launcher = new Launcher({
+  root: element("#launcher"),
+  onOpen: (index) => tabs.selectSpace(index),
+  onNew: () => void tabs.open(),
+  // The command is typed into the new shell, as if the user had.
+  onRun: (command) =>
+    void tabs.open().then((tab) => {
+      if (tab) void invoke("session_write", { id: tab.id, text: `${command}\r` });
+    }),
+});
+// The window gives the focus back to the terminal: with no tab, it is the
+// prompt of the launcher that wants it.
+window.addEventListener("focus", () => launcher.focus());
 
 // Where what belongs to the space opens: under its name, or beside the rail.
 function underSpace(): { left: number; top: number; width: number } {
@@ -161,7 +198,7 @@ function openSpaceMenu(): void {
         hint: index < 9 ? `⌃${index + 1}` : undefined,
         current,
         quiet: closedAt !== null,
-        onSelect: () => tabs.selectSpace(index),
+        onSelect: () => void tabs.selectSpace(index),
       })),
       {
         label: "New space",
@@ -170,7 +207,19 @@ function openSpaceMenu(): void {
         line: true,
         onSelect: () => void tabs.newSpace(),
       },
-      { label: "Space settings…", icon: "›", quiet: true, onSelect: openSettings },
+      ...(tabs.spaceList().some((info) => info.current)
+        ? [{ label: "Space settings…", icon: "›", quiet: true, onSelect: openSettings }]
+        : []),
+      ...(tabs.looseCount() > 0
+        ? [
+            {
+              label: "Save tabs as space",
+              icon: "↧",
+              quiet: true,
+              onSelect: () => void tabs.saveAsSpace(),
+            },
+          ]
+        : []),
     ],
     onClose: () => spaceName.classList.remove("open"),
   });
@@ -208,7 +257,7 @@ window.addEventListener(
         tabs.select(action.index);
         break;
       case "select-space":
-        tabs.selectSpace(action.index);
+        void tabs.selectSpace(action.index);
         break;
       case "step-space":
         tabs.stepSpace(action.step);
@@ -221,7 +270,7 @@ window.addEventListener(
   { capture: true },
 );
 
-if (!(await tabs.restore(saved))) await tabs.open();
+tabs.restore(saved);
 started = true;
 saveSoon();
 
