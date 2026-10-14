@@ -1,15 +1,29 @@
 //! The spaces and tabs the app was showing, kept across restarts: the
 //! webview hands them over after every change and asks for them at start.
 
+use std::path::PathBuf;
+
 use ttylde_core::error::Error;
 use ttylde_core::state::{self, State};
+
+/// Where the state is kept. A debug build, the one `tauri dev` runs, keeps
+/// its own next to the one of the installed app: trying a change does not
+/// touch the spaces in daily use.
+fn path() -> Option<PathBuf> {
+    let path = state::default_path()?;
+    Some(if cfg!(debug_assertions) {
+        path.with_file_name("state-dev.toml")
+    } else {
+        path
+    })
+}
 
 /// What was saved last time. Nothing saved, or nowhere to save it, is an
 /// empty state; so is a file that cannot be read, which is set aside first
 /// so that the next save does not write over it.
 #[tauri::command]
 pub async fn state_load() -> State {
-    let Some(path) = state::default_path() else {
+    let Some(path) = path() else {
         return State::default();
     };
     match state::load(&path) {
@@ -29,6 +43,6 @@ pub async fn state_load() -> State {
 /// Writes what the app shows now. Async: it runs off the main thread.
 #[tauri::command]
 pub async fn state_save(state: State) -> Result<(), String> {
-    let path = state::default_path().ok_or("no home folder to save the state in")?;
+    let path = path().ok_or("no home folder to save the state in")?;
     state::save(&state, &path).map_err(|e| e.to_string())
 }
