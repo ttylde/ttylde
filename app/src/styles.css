@@ -85,7 +85,6 @@ body {
   flex-direction: column;
   box-sizing: border-box;
   padding: 0 10px 12px;
-  border-right: 1px solid var(--line);
 }
 
 /* Room for the traffic lights, which the system draws over the page. */
@@ -635,7 +634,6 @@ body.collapsed #sidebar {
   width: 56px;
   align-items: center;
   padding: 0 0 12px;
-  border-right: 0;
 }
 
 body.collapsed #group {
