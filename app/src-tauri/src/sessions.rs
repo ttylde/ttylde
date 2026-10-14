@@ -43,10 +43,30 @@ pub fn session_open(
     config: State<'_, Config>,
     cols: u16,
     rows: u16,
+    cwd: Option<String>,
+    shell: Option<String>,
     on_event: Channel<SessionEvent>,
 ) -> Result<u32, String> {
     // The user's shell, launched as a login shell like Terminal.app does.
-    let mut cmd = CommandBuilder::new_default_prog();
+    let mut cmd = match shell {
+        Some(shell) => {
+            let mut cmd = CommandBuilder::new(&shell);
+            cmd.arg("-l");
+            cmd
+        }
+        None => CommandBuilder::new_default_prog(),
+    };
+
+    let home = std::env::home_dir();
+    if let Some(cwd) = cwd {
+        if let Some(home) = home {
+            let folder = ttylde_core::cwd::expand_home(&cwd, &home);
+            if folder.is_dir() {
+                cmd.cwd(&folder);
+            }
+        }
+    }
+
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", "Ttylde");

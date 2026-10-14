@@ -5,6 +5,9 @@
 export type Action =
   | { type: "new-tab" }
   | { type: "select-tab"; index: number }
+  | { type: "select-space"; index: number }
+  /** `step` is 1 for the next space, -1 for the one before. */
+  | { type: "step-space"; step: number }
   | { type: "toggle-sidebar" };
 
 /** The parts of a `KeyboardEvent` a shortcut depends on. */
@@ -25,6 +28,13 @@ function hasAppModifier(e: KeyStroke, mac: boolean): boolean {
 
 /** The app action a key stroke asks for, or `null` if it is not a shortcut. */
 export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
+  // Spaces are on Ctrl on every platform, as in browsers. With Shift the
+  // digits are taken where Ctrl+Shift is the modifier of the app.
+  if (e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (e.key === "Tab") return { type: "step-space", step: e.shiftKey ? -1 : 1 };
+    const digit = /^Digit([1-9])$/.exec(e.code);
+    if (digit && !e.shiftKey) return { type: "select-space", index: Number(digit[1]) - 1 };
+  }
   if (!hasAppModifier(e, mac)) return null;
   if (e.key.toLowerCase() === "t") return { type: "new-tab" };
   // `key`, not `code`: the backslash sits on different keys across layouts.

@@ -94,6 +94,107 @@ body {
   flex: none;
 }
 
+/* A round mark in the color of a space. */
+.dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--space-color);
+}
+
+/* The space that is shown: its name is the button that lists the others,
+   and the cross at the other end closes it. */
+#space-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  margin-bottom: 16px;
+}
+
+#space {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: 600 13px var(--ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+#space:hover,
+#space.open {
+  background: var(--hover);
+}
+
+#space .name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#space .chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+
+#space.open .chevron {
+  transform: rotate(180deg);
+}
+
+#close-space {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: 13px / 1 var(--ui);
+  cursor: pointer;
+}
+
+#close-space:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* The only open space: closing it would leave nothing to show. */
+#close-space[hidden] {
+  display: none;
+}
+
+/* The same button for the rail, where there is no room for a name. */
+#space-dot {
+  display: none;
+  place-items: center;
+  width: 32px;
+  height: 20px;
+  flex: none;
+  margin-bottom: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+}
+
+#space-dot:hover {
+  background: var(--hover);
+}
+
 /* The name of what the list below holds. */
 #section {
   flex: none;
@@ -135,6 +236,11 @@ body {
   cursor: default;
 }
 
+/* The tabs of the spaces that are not shown keep their rows, out of sight. */
+.tab[hidden] {
+  display: none;
+}
+
 .tab:hover,
 .tab.in-menu {
   background: var(--hover);
@@ -146,28 +252,37 @@ body {
   box-shadow: var(--shadow-row);
 }
 
-/* A mark in the color of the tab, at the start of its row. */
-.tab-bar {
+/* A small dot at the start of the row: the same for every tab. */
+.tab-mark {
   width: 6px;
   flex: none;
   display: flex;
   justify-content: center;
 }
 
-.tab-bar::before {
+.tab-mark::before {
   content: "";
-  width: 2px;
-  height: 9px;
-  border-radius: 1px;
-  background: var(--tab-color);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #b8c2bd;
 }
 
 /* The icon the user picked, in the color of the tab. */
 .tab-icon {
+  display: grid;
+  place-items: center;
   width: 16px;
+  height: 16px;
   flex: none;
-  text-align: center;
   color: var(--tab-color);
+}
+
+/* The icon of a tab, in its row and in the form. */
+.line-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
 }
 
 .tab-title {
@@ -244,7 +359,7 @@ body {
   color: var(--ink);
 }
 
-/* As wide as the bar and the icon of a tab: the text lines up with theirs. */
+/* As wide as the mark and the icon of a tab: the text lines up with theirs. */
 #new-tab .plus {
   width: 30px;
   flex: none;
@@ -310,16 +425,15 @@ body {
   justify-content: flex-end;
   flex: none;
   margin-top: auto;
-  padding: 10px 8px 0;
-  border-top: 1px solid var(--line);
+  padding: 4px 8px 0;
 }
 
 #toggle-sidebar {
   display: grid;
   place-items: center;
-  padding: 3px 6px;
+  padding: 3px 7px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: none;
   color: var(--muted);
   cursor: pointer;
@@ -334,13 +448,6 @@ body {
   display: block;
 }
 
-/* Shown in place of the title when the sidebar is a rail. */
-.tab-short {
-  display: none;
-  color: var(--tab-color);
-  font: 600 10px var(--mono);
-}
-
 /* The sidebar as a rail: the tabs are small squares in one box. */
 body.collapsed #sidebar {
   width: 56px;
@@ -353,9 +460,13 @@ body.collapsed #group {
   width: 40px;
   align-items: center;
   gap: 4px;
-  padding: 4px 0;
+  padding: 8px 0 4px;
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.55);
+}
+
+body.collapsed #space-dot {
+  display: grid;
 }
 
 body.collapsed #tabs {
@@ -383,13 +494,16 @@ body.collapsed #new-tab .plus {
   padding: 0;
 }
 
-body.collapsed .tab-short {
-  display: block;
+/* In the rail a tab is its icon alone, a little larger. */
+body.collapsed .tab-icon,
+body.collapsed .tab-icon .line-icon {
+  width: 16px;
+  height: 16px;
 }
 
+body.collapsed #space-bar,
 body.collapsed #section,
-body.collapsed .tab-bar,
-body.collapsed .tab-icon,
+body.collapsed .tab-mark,
 body.collapsed .tab-title,
 body.collapsed .tab-branch,
 body.collapsed .tab .tab-actions,
@@ -480,6 +594,40 @@ body.collapsed #stage {
   background: var(--hover);
 }
 
+.menu .menu-item.current {
+  background: rgba(36, 102, 255, 0.1);
+  font-weight: 600;
+}
+
+.menu .menu-item.quiet {
+  color: var(--muted);
+}
+
+.menu .menu-item.quiet:hover {
+  color: var(--ink);
+}
+
+.menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.menu-meta {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.menu-hint {
+  flex: none;
+  color: var(--faint);
+  font: 11px var(--mono);
+}
+
 .menu .menu-item.danger {
   color: var(--danger);
 }
@@ -502,14 +650,19 @@ body.collapsed #stage {
   color: inherit;
 }
 
-/* Name, color and icon of a tab. */
-.rename {
+/* A form: a field for a name, things to pick, and its buttons. */
+.form {
   gap: 10px;
   width: 260px;
   padding: 12px;
 }
 
-.rename-name {
+/* Room for eight icons a row, all of them in sight. */
+.form.rename {
+  width: 284px;
+}
+
+.field {
   padding: 7px 10px;
   border: 1px solid rgba(21, 33, 28, 0.14);
   border-radius: 7px;
@@ -520,72 +673,121 @@ body.collapsed #stage {
   user-select: text;
 }
 
-.rename-name::placeholder {
+.field::placeholder {
   color: var(--faint);
 }
 
-.rename-name:focus {
+.field:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(36, 102, 255, 0.22);
 }
 
-.rename-colors,
-.rename-icons,
-.rename-actions {
+/* The colors to pick from, a row each. */
+.swatch-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.swatches,
+.form-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.rename-icons {
-  gap: 6px;
+/* Eight icons a row; the rest are a scroll away. */
+.glyphs {
+  display: grid;
+  grid-template-columns: repeat(8, 28px);
+  gap: 2px;
 }
 
-.rename-actions {
+.form-actions {
   justify-content: flex-end;
   font-size: 12px;
 }
 
-.rename .rename-color {
+/* A field with what it is for written above it. */
+.form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* Choices side by side: the one picked is raised out of the groove. */
+.segments {
+  display: flex;
+  gap: 4px;
+  width: fit-content;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(21, 33, 28, 0.06);
+  font: 12px var(--mono);
+}
+
+.form .segment {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+}
+
+.form .segment.picked {
+  background: var(--panel);
+  box-shadow: var(--shadow-button);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.form .swatch {
   width: 18px;
   height: 18px;
   padding: 0;
   border-radius: 50%;
 }
 
-.rename .rename-color.picked {
+.form .swatch.picked {
   box-shadow:
     0 0 0 2px var(--panel),
     0 0 0 4px var(--ink);
 }
 
-.rename .rename-icon {
+/* The icons a tab can have, in the color picked for it. */
+.form .glyph {
+  display: grid;
+  place-items: center;
   width: 28px;
   height: 28px;
   padding: 0;
   border-radius: 6px;
-  background: rgba(21, 33, 28, 0.03);
+  background: none;
   color: var(--tab-color);
-  font-size: 13px;
 }
 
-.rename .rename-icon.picked {
-  background: var(--pressed);
+.form .glyph:hover {
+  background: var(--hover);
 }
 
-.rename .rename-cancel {
+.form .glyph.picked {
+  background: rgba(36, 102, 255, 0.14);
+}
+
+.form .ghost {
   padding: 5px 10px;
   border-radius: 6px;
   background: none;
   color: var(--muted);
 }
 
-.rename .rename-cancel:hover {
+.form .ghost:hover {
   background: var(--hover);
 }
 
 /* The primary button: solid white and lifted, the one opaque thing. */
-.rename .rename-save {
+.form .primary {
   padding: 5px 12px;
   border-radius: var(--radius-button);
   background: #fff;
@@ -594,8 +796,22 @@ body.collapsed #stage {
   font-weight: 600;
 }
 
-.rename .rename-save:hover {
+.form .primary:hover {
   background: #f5f7fc;
+}
+
+/* What takes something away: at the other end from the buttons that keep. */
+.form .danger {
+  margin-right: auto;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: none;
+  color: var(--danger);
+}
+
+.form .danger:hover,
+.form .danger.asked {
+  background: rgba(208, 74, 66, 0.08);
 }
 
 /* Off-screen but focusable: it receives the keyboard instead of the canvas. */

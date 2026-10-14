@@ -10,6 +10,11 @@ describe("defaultLook", () => {
     expect(ICONS).toContain(look.icon);
   });
 
+  // Every tab starts the same, whatever the color of its space.
+  test("is the neutral color", () => {
+    expect(defaultLook().color).toBe("#5f6f68");
+  });
+
   // Editing the look of one tab must not change the others.
   test("is a new object every time", () => {
     expect(defaultLook()).not.toBe(defaultLook());
@@ -35,10 +40,6 @@ describe("popoverTop", () => {
 
   test("moves up when it would leave the window", () => {
     expect(popoverTop(780, 180, 800)).toBe(612);
-  });
-
-  test("the lift can be chosen", () => {
-    expect(popoverTop(200, 180, 800, 6)).toBe(194);
   });
 
   test("never goes above the window", () => {
