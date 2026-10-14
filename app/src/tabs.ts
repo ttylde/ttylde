@@ -4,6 +4,7 @@ import { folderName } from "./label";
 import { iconMarkup, type Look } from "./look";
 import { closeMenu, openMenu } from "./menu";
 import { openRename } from "./rename";
+import { dropIndex, makeRoom } from "./reorder";
 import { createSpace, type Space, type SpaceChanges, stepIndex } from "./space";
 import {
   closeTab,
@@ -19,6 +20,9 @@ import type { Font, SavedState } from "./types";
 
 /** Shown in the sidebar for a tab with no title and no known folder. */
 const UNTITLED = "shell";
+
+/** How far the pointer moves, in pixels, before a press on a row is a drag. */
+const DRAG_THRESHOLD = 4;
 
 /** Where a tab belongs: a space, or none (`null`). */
 type Place = Space | null;
@@ -268,6 +272,7 @@ export class Tabs {
 
     row.addEventListener("click", () => this.activate(tab));
     row.addEventListener("dblclick", () => this.rename(tab));
+    row.addEventListener("pointerdown", (e) => this.press(tab, e));
     // A double click on a button is two clicks on it, not a rename.
     actions.addEventListener("dblclick", (e) => e.stopPropagation());
     more.addEventListener("click", (e) => {
@@ -684,6 +689,86 @@ export class Tabs {
       },
     });
     this.renaming = tab;
+  }
+
+  // A press on the row of `tab`: moved past the threshold, it drags the row
+  // among the others of its space, which make room for it; released, the
+  // tab takes that place and is shown, as a click would.
+  private press(tab: Tab, e: PointerEvent): void {
+    if (e.button !== 0 || (e.target as Element).closest(".tab-actions")) return;
+    const entry = this.entries.find((x) => x.tab === tab);
+    if (!entry) return;
+    const { row, space: place } = entry;
+    const rows = this.tabsOf(place).map((x) => x.row);
+    if (rows.length < 2) return;
+    const from = rows.indexOf(row);
+    // Measured once: the rows that make room only move by transforms.
+    const boxes = rows.map((r) => r.getBoundingClientRect());
+    const centers = boxes.map((box) => box.top + box.height / 2);
+    const step = boxes[1].top - boxes[0].top;
+    const min = boxes[0].top - boxes[from].top;
+    const max = boxes[boxes.length - 1].top - boxes[from].top;
+    const start = e.clientY;
+    let dragging = false;
+    let to = from;
+
+    const move = (m: PointerEvent) => {
+      const dy = Math.min(max, Math.max(min, m.clientY - start));
+      if (!dragging) {
+        if (Math.abs(m.clientY - start) < DRAG_THRESHOLD) return;
+        dragging = true;
+        closeForm();
+        closeMenu();
+        this.options.list.classList.add("reordering");
+        row.classList.add("dragging");
+      }
+      row.style.transform = `translateY(${dy}px)`;
+      to = dropIndex(centers, from, centers[from] + dy);
+      rows.forEach((r, index) => {
+        if (index === from) return;
+        const shift = makeRoom(index, from, to, step);
+        r.style.transform = shift === 0 ? "" : `translateY(${shift}px)`;
+      });
+    };
+    const end = () => {
+      row.removeEventListener("pointermove", move);
+      row.removeEventListener("pointerup", end);
+      row.removeEventListener("pointercancel", end);
+      if (!dragging) return;
+      // Without the transition first, the rows would slide back from where
+      // they already are.
+      this.options.list.classList.remove("reordering");
+      row.classList.remove("dragging");
+      for (const r of rows) r.style.transform = "";
+      // A tab that opened or closed meanwhile, or a space that changed,
+      // makes the places counted at the start wrong: nothing moves.
+      const now = this.tabsOf(place);
+      if (entry.space !== place || now.length !== rows.length || !now.includes(entry)) return;
+      this.place(entry, to);
+      if (place === this.space) this.activate(tab);
+    };
+    row.setPointerCapture(e.pointerId);
+    row.addEventListener("pointermove", move);
+    row.addEventListener("pointerup", end);
+    row.addEventListener("pointercancel", end);
+  }
+
+  // Puts `entry` at `index` among the tabs of its space, in the list and
+  // in the sidebar.
+  private place(entry: Entry, index: number): void {
+    if (this.tabsOf(entry.space).indexOf(entry) === index) return;
+    const others = this.tabsOf(entry.space).filter((x) => x !== entry);
+    this.entries.splice(this.entries.indexOf(entry), 1);
+    const before = others[index];
+    if (before) {
+      this.entries.splice(this.entries.indexOf(before), 0, entry);
+      before.row.before(entry.row);
+    } else {
+      const after = others[others.length - 1];
+      this.entries.splice(this.entries.indexOf(after) + 1, 0, entry);
+      after.row.after(entry.row);
+    }
+    this.changed();
   }
 
   // Closing the visible tab shows the one that takes its place in the

@@ -235,6 +235,18 @@ body {
   cursor: default;
 }
 
+/* While a row is dragged, the others slide to make room for it; the dragged
+   one follows the pointer, above them. */
+.reordering .tab {
+  transition: transform 150ms ease;
+}
+
+.tab.dragging {
+  position: relative;
+  z-index: 1;
+  transition: none;
+}
+
 /* The tabs of the spaces that are not shown keep their rows, out of sight. */
 .tab[hidden] {
   display: none;
