@@ -4,7 +4,7 @@ use alacritty_terminal::{
 };
 
 use super::*;
-use crate::cwd::Location;
+use crate::{command::Mark, cwd::Location};
 
 #[test]
 fn write_text_on_two_lines() {
@@ -794,4 +794,77 @@ fn working_directory_and_title_arrive_together() {
     assert_eq!(events.len(), 2);
     assert!(events.contains(&EmulatorEvent::Title("zsh".into())));
     assert!(events.contains(&located("/tmp")[0]));
+}
+
+fn marked(nonce: Option<&str>, bytes: &[u8]) -> Vec<EmulatorEvent> {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.set_nonce(nonce.map(String::from));
+    emulator.feed(bytes);
+    emulator.take_events()
+}
+
+fn mark(mark: Mark) -> Vec<EmulatorEvent> {
+    vec![EmulatorEvent::Mark(mark)]
+}
+
+// OSC 133 marks the prompt and the end of a command, with its status.
+#[test]
+fn prompts_and_ends_become_marks() {
+    assert_eq!(marked(None, b"\x1b]133;A\x07"), mark(Mark::Prompt));
+    assert_eq!(
+        marked(None, b"\x1b]133;D;127\x07"),
+        mark(Mark::End(Some(127)))
+    );
+    assert_eq!(marked(None, b"\x1b]133;D\x07"), mark(Mark::End(None)));
+    // The end of the prompt is not used yet.
+    assert!(marked(None, b"\x1b]133;B\x07").is_empty());
+}
+
+// The text of a command counts only with the nonce of the session.
+#[test]
+fn the_text_of_a_command_needs_the_nonce() {
+    let start = b"\x1b]133;C;cmdline_url=npm%20run%20dev%3B%20caff%C3%A8;nonce=s3cret\x07";
+    assert_eq!(
+        marked(Some("s3cret"), start),
+        mark(Mark::Start(Some("npm run dev; caffè".into())))
+    );
+    assert_eq!(marked(Some("other"), start), mark(Mark::Start(None)));
+    assert_eq!(marked(None, start), mark(Mark::Start(None)));
+    assert_eq!(
+        marked(Some("s3cret"), b"\x1b]133;C;cmdline_url=ls\x07"),
+        mark(Mark::Start(None))
+    );
+    // An empty nonce is no nonce.
+    assert_eq!(
+        marked(Some(""), b"\x1b]133;C;cmdline_url=ls;nonce=\x07"),
+        mark(Mark::Start(None))
+    );
+    assert_eq!(
+        marked(Some("s3cret"), b"\x1b]133;C\x07"),
+        mark(Mark::Start(None))
+    );
+}
+
+// VS Code's 633 marks the same way, and sends the text on its own.
+#[test]
+fn vscode_marks_are_understood() {
+    assert_eq!(marked(None, b"\x1b]633;A\x07"), mark(Mark::Prompt));
+    assert_eq!(
+        marked(Some("n"), b"\x1b]633;E;echo a\\x3bb \\\\ c;n\x07"),
+        mark(Mark::Text("echo a;b \\ c".into()))
+    );
+    assert!(marked(Some("n"), b"\x1b]633;E;echo;wrong\x07").is_empty());
+    // `E` is VS Code's only.
+    assert!(marked(Some("n"), b"\x1b]133;E;echo;n\x07").is_empty());
+}
+
+// Long command lines arrive whole.
+#[test]
+fn long_command_lines_arrive_whole() {
+    let text = "x".repeat(5000);
+    let start = format!("\x1b]133;C;cmdline_url={text};nonce=n\x07");
+    assert_eq!(
+        marked(Some("n"), start.as_bytes()),
+        mark(Mark::Start(Some(text)))
+    );
 }

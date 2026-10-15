@@ -3,19 +3,29 @@ use serde::Serialize;
 use std::{
     io,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+    time::Duration,
 };
 
 use crate::{
+    command::{self, Change},
     cwd::{hostname, of_process, Tracker},
     emulator::{Emulator, EmulatorEvent, SelectionKind, SelectionSide},
     error::Result,
     frame::Frame,
     git::{Status, Watcher},
     input::{encode_focus, encode_key, encode_mouse, encode_paste, Key, Mods, MouseEvent},
-    pty::Pty,
+    pty::{Pty, PtyProbe},
+    shell,
     theme::Theme,
 };
+
+/// How long a command has to stay in the foreground to count as running:
+/// see `SessionEvent::CommandRunning`.
+const RUNNING_AFTER: Duration = Duration::from_millis(500);
 
 /// Serialized as `{ "type": "Frame", "data": {...} }` and `{ "type": "Exit" } and ...`.
 #[derive(Debug, PartialEq, Serialize)]
@@ -30,6 +40,18 @@ pub enum SessionEvent {
     /// `None`: the folder is in no repository.
     Git(Option<Status>),
     Bell,
+    /// The shell shows a prompt: it is ready for a command. Only from a
+    /// shell with the integration (see `shell`), as the three below.
+    Prompt,
+    /// A command started, or its text arrived after it did. `None`: the
+    /// text is not known, or is not to be kept (it starts with a space).
+    CommandStart(Option<String>),
+    /// The command is still in the foreground a moment after it started:
+    /// a process to start again if the session is closed now. What the
+    /// system says about the foreground confirms what the output said.
+    CommandRunning(String),
+    /// The command ended, with its exit status if the shell said it.
+    CommandEnd(Option<i32>),
     Exit,
 }
 
@@ -50,12 +72,23 @@ impl Session {
         history: usize,
         on_event: EventHandler,
     ) -> Result<Self> {
+        let nonce = cmd
+            .get_env(shell::NONCE_VAR)
+            .and_then(|nonce| nonce.to_str())
+            .map(String::from);
         let pty = Pty::spawn(cmd, cols, rows)?;
         let mut reader = pty.reader()?;
         let writer = pty.writer();
         let probe = pty.probe();
+        let shell_pid = pty.pid();
         let mut tracker = Tracker::new(hostname());
-        let emulator = Arc::new(Mutex::new(Emulator::new(cols, rows, theme, history)));
+        let mut commands = command::Tracker::default();
+        // Changes at every start and end: a check of the foreground made for
+        // a command that is over by then does not count.
+        let generation = Arc::new(AtomicU64::new(0));
+        let mut emulator = Emulator::new(cols, rows, theme, history);
+        emulator.set_nonce(nonce);
+        let emulator = Arc::new(Mutex::new(emulator));
 
         let shared = Arc::clone(&emulator);
         let on_event = Arc::new(on_event);
@@ -95,6 +128,33 @@ impl Session {
                                     if let Some(folder) = tracker.announce(location) {
                                         watcher.set_folder(folder.clone());
                                         on_event_for_thread(SessionEvent::Cwd(folder));
+                                    }
+                                }
+                                EmulatorEvent::Mark(mark) => {
+                                    for change in commands.mark(mark) {
+                                        let event = match change {
+                                            Change::Prompt => SessionEvent::Prompt,
+                                            Change::Started(text) => {
+                                                let id =
+                                                    generation.fetch_add(1, Ordering::SeqCst) + 1;
+                                                if let Some(text) = &text {
+                                                    confirm_running(
+                                                        text.clone(),
+                                                        id,
+                                                        Arc::clone(&generation),
+                                                        probe.clone(),
+                                                        shell_pid,
+                                                        Arc::clone(&on_event_for_thread),
+                                                    );
+                                                }
+                                                SessionEvent::CommandStart(text)
+                                            }
+                                            Change::Ended(status) => {
+                                                generation.fetch_add(1, Ordering::SeqCst);
+                                                SessionEvent::CommandEnd(status)
+                                            }
+                                        };
+                                        on_event_for_thread(event);
                                     }
                                 }
                             }
@@ -261,6 +321,29 @@ impl Session {
             (self.on_event)(SessionEvent::Frame(frame));
         }
     }
+}
+
+/// Sends `CommandRunning` if, a moment from now, the command `id` is still
+/// the last one started and a process other than the shell is in the
+/// foreground. A shell builtin, or a command already over, is not one.
+fn confirm_running(
+    text: String,
+    id: u64,
+    generation: Arc<AtomicU64>,
+    probe: PtyProbe,
+    shell_pid: Option<u32>,
+    on_event: Arc<EventHandler>,
+) {
+    std::thread::spawn(move || {
+        std::thread::sleep(RUNNING_AFTER);
+        if generation.load(Ordering::SeqCst) != id {
+            return;
+        }
+        let foreground = probe.foreground_pid();
+        if foreground.is_some() && foreground != shell_pid {
+            on_event(SessionEvent::CommandRunning(text));
+        }
+    });
 }
 
 impl Drop for Session {
@@ -633,6 +716,38 @@ mod tests {
         let (_session, rx) = spawn_with_channel(cmd);
 
         wait_for_event(&rx, SessionEvent::Cwd("/announced/folder".into()));
+    }
+
+    // The marks of a shell with the integration arrive as events; the text
+    // of a command only with the nonce the session was started with.
+    #[test]
+    fn marks_of_the_shell_arrive_as_events() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.env(shell::NONCE_VAR, "n0nce");
+        cmd.args([
+            "-c",
+            r"printf '\033]133;A\007\033]133;C;cmdline_url=make%%20all;nonce=n0nce\007\033]133;D;2\007'; read x",
+        ]);
+        let (_session, rx) = spawn_with_channel(cmd);
+
+        wait_for_event(&rx, SessionEvent::Prompt);
+        wait_for_event(&rx, SessionEvent::CommandStart(Some("make all".into())));
+        wait_for_event(&rx, SessionEvent::CommandEnd(Some(2)));
+    }
+
+    // Output that forges a mark without the nonce gives no text, and so
+    // nothing to start again.
+    #[test]
+    fn a_forged_mark_has_no_text() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.env(shell::NONCE_VAR, "n0nce");
+        cmd.args([
+            "-c",
+            r"printf '\033]133;C;cmdline_url=rm%%20-rf%%20~;nonce=guess\007'; read x",
+        ]);
+        let (_session, rx) = spawn_with_channel(cmd);
+
+        wait_for_event(&rx, SessionEvent::CommandStart(None));
     }
 
     // The branch is the one of the repository the shell is in.

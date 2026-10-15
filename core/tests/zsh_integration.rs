@@ -6,11 +6,20 @@
 
 mod common;
 
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::Path,
+    sync::mpsc::{self, Receiver},
+    time::Duration,
+};
 
 use common::{home, scripts, Shell, NONCE};
 use portable_pty::CommandBuilder;
-use ttylde_core::shell;
+use ttylde_core::{
+    session::{EventHandler, Session, SessionEvent},
+    shell,
+    theme::Theme,
+};
 
 const ZSH: &str = "/bin/zsh";
 const PROMPT_END: &str = "\x1b]133;B\x07";
@@ -166,4 +175,115 @@ fn the_folder_is_announced() {
     let path = format!("{}/my%20dir\x07", home.display());
     assert!(text.contains("\x1b]7;file://"), "{text:?}");
     assert!(text.contains(&path), "{text:?}");
+}
+
+/// A session of zsh as the app opens it, and its events.
+fn session(home: &Path) -> Option<(Session, Receiver<SessionEvent>)> {
+    if !Path::new(ZSH).exists() {
+        return None;
+    }
+    let mut cmd = CommandBuilder::new(ZSH);
+    cmd.arg("-l");
+    cmd.cwd(home);
+    cmd.env("HOME", home);
+    cmd.env("TERM", "xterm-256color");
+    cmd.env_remove("ZDOTDIR");
+    shell::integrate(&mut cmd, Path::new(ZSH), &scripts(), &shell::nonce());
+
+    let (tx, rx) = mpsc::channel();
+    let on_event: EventHandler = Box::new(move |event| {
+        let _ = tx.send(event);
+    });
+    let session = Session::spawn(cmd, 80, 24, Theme::default(), 100, on_event).unwrap();
+    Some((session, rx))
+}
+
+/// The command events up to the first one `until` accepts, the frames left out.
+fn commands_until(
+    rx: &Receiver<SessionEvent>,
+    until: impl Fn(&SessionEvent) -> bool,
+) -> Vec<SessionEvent> {
+    let mut seen = Vec::new();
+    loop {
+        let event = rx
+            .recv_timeout(Duration::from_secs(10))
+            .unwrap_or_else(|_| panic!("timed out; seen: {seen:?}"));
+        let done = until(&event);
+        if matches!(
+            event,
+            SessionEvent::Prompt
+                | SessionEvent::CommandStart(_)
+                | SessionEvent::CommandRunning(_)
+                | SessionEvent::CommandEnd(_)
+        ) {
+            seen.push(event);
+        }
+        if done {
+            return seen;
+        }
+    }
+}
+
+// A program still in the foreground is one to start again; it ends with
+// the status the shell saw.
+#[test]
+fn a_long_command_counts_as_running() {
+    let home = home("zsh-running", &[(".zshrc", "PS1='%# '\n")]);
+    let Some((mut session, rx)) = session(&home) else {
+        return;
+    };
+    commands_until(&rx, |e| *e == SessionEvent::Prompt);
+    session.write(b"sleep 2\r").unwrap();
+
+    let seen = commands_until(&rx, |e| matches!(e, SessionEvent::CommandEnd(_)));
+    assert_eq!(
+        seen,
+        [
+            SessionEvent::CommandStart(Some("sleep 2".into())),
+            SessionEvent::CommandRunning("sleep 2".into()),
+            SessionEvent::CommandEnd(Some(0)),
+        ]
+    );
+}
+
+// A command over before the check, or a builtin that keeps the shell in
+// the foreground, is not.
+#[test]
+fn short_commands_and_builtins_are_not_running() {
+    let home = home("zsh-builtin", &[(".zshrc", "PS1='%# '\n")]);
+    let Some((mut session, rx)) = session(&home) else {
+        return;
+    };
+    commands_until(&rx, |e| *e == SessionEvent::Prompt);
+    session.write(b"true\r").unwrap();
+    commands_until(&rx, |e| *e == SessionEvent::Prompt);
+    session.write(b"read -t 1 x\r").unwrap();
+
+    let seen = commands_until(&rx, |e| *e == SessionEvent::CommandEnd(Some(1)));
+    assert!(
+        !seen
+            .iter()
+            .any(|e| matches!(e, SessionEvent::CommandRunning(_))),
+        "{seen:?}"
+    );
+}
+
+// A command typed with a space in front is not kept.
+#[test]
+fn a_command_after_a_space_has_no_text() {
+    let home = home("zsh-space", &[(".zshrc", "PS1='%# '\n")]);
+    let Some((mut session, rx)) = session(&home) else {
+        return;
+    };
+    commands_until(&rx, |e| *e == SessionEvent::Prompt);
+    session.write(b" sleep 1\r").unwrap();
+
+    let seen = commands_until(&rx, |e| matches!(e, SessionEvent::CommandEnd(_)));
+    assert_eq!(
+        seen,
+        [
+            SessionEvent::CommandStart(None),
+            SessionEvent::CommandEnd(Some(0))
+        ]
+    );
 }

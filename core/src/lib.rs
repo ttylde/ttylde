@@ -2,6 +2,7 @@
 //!
 //! All the terminal logic lives here. This crate must not depend on any
 //! UI toolkit.
+pub mod command;
 pub mod config;
 pub mod cwd;
 pub mod emulator;

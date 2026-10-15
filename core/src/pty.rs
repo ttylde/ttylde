@@ -68,6 +68,11 @@ impl Pty {
         self.writer.clone()
     }
 
+    /// The process the PTY was started with.
+    pub fn pid(&self) -> Option<u32> {
+        self.child.process_id()
+    }
+
     pub fn probe(&self) -> PtyProbe {
         self.master.clone()
     }
