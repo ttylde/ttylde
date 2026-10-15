@@ -408,8 +408,161 @@ body {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-direction: column;
   box-sizing: border-box;
-  padding: 12px;
+  padding: 6px 12px 12px;
+}
+
+/* The line above the terminal: space, tab, branch, folder. It keeps its
+   place with no tab, so the terminal under it keeps its size. */
+#header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+  padding: 0 12px;
+  overflow: hidden;
+  color: var(--muted);
+  font: 11px var(--ui);
+  white-space: nowrap;
+}
+
+#header.empty {
+  visibility: hidden;
+}
+
+/* With the sidebar open, the space is a label: its name is there too. */
+.header-space {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  max-width: 30%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  pointer-events: none;
+}
+
+.header-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.header-space-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-chevron {
+  display: none;
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+
+/* With the sidebar collapsed, the rail has no name: the space here is the
+   button of the space menu. */
+body.collapsed .header-space {
+  gap: 7px;
+  margin: 0 10px 0 -8px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  color: var(--ink);
+  font: 600 13px var(--ui);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+body.collapsed .header-dot {
+  width: 9px;
+  height: 9px;
+}
+
+body.collapsed .header-chevron {
+  display: block;
+}
+
+body.collapsed .header-space:hover,
+body.collapsed .header-space.open {
+  background: rgba(21, 33, 28, 0.06);
+}
+
+.header-space.open .header-chevron {
+  transform: rotate(180deg);
+}
+
+/* A tab without a space, or a pinned one. */
+.header-space.none .header-dot {
+  background: rgba(21, 33, 28, 0.18);
+}
+
+.header-separator {
+  flex: none;
+  color: #93a19b;
+}
+
+.header-tab {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font: 600 11px var(--mono);
+  text-overflow: ellipsis;
+}
+
+/* The branch, underlined like the other chips of the header will be. */
+.header-branch {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--ink);
+  font: 10.5px var(--mono);
+}
+
+.header-branch[hidden],
+.header-folder[hidden] {
+  display: none;
+}
+
+.header-branch-text {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 2px;
+}
+
+.header-branch-glyph {
+  color: var(--muted);
+}
+
+.header-branch-mark {
+  color: #1f9a6a;
+}
+
+.header-branch-mark.dirty {
+  color: #8a7d12;
+}
+
+.header-branch-line {
+  height: 2px;
+  background: rgba(21, 33, 28, 0.15);
+}
+
+.header-folder {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--faint);
+  font: 10.5px var(--mono);
+  text-overflow: ellipsis;
 }
 
 /* The terminal is a panel laid on the window. Its color is the background
