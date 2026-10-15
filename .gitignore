@@ -5,3 +5,4 @@ dist
 app/src-tauri/gen
 .vscode/
 .tokensave/
+.dev/

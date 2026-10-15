@@ -540,6 +540,38 @@ mod tests {
         assert!(!glob("ls", "ls -la"));
     }
 
+    // The file debug builds start from: as it is, and with every option
+    // turned on, it is a valid config.
+    #[test]
+    fn the_example_config_is_valid() {
+        let example = include_str!("../../dev/config.example.toml");
+        assert_eq!(Config::parse(example).unwrap(), Config::default());
+
+        let uncommented: String = example
+            .lines()
+            .filter(|line| !line.contains("..."))
+            .map(|line| match line.strip_prefix("# ") {
+                Some(option) if option.contains(" = ") => option,
+                _ => line,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let config = Config::parse(&uncommented).unwrap();
+        assert_eq!(config.restore.run, Run::Ask);
+        assert_eq!(config.restore.patterns.len(), 2);
+    }
+
+    // The example in the README, between ```toml and ```.
+    #[test]
+    fn the_config_in_the_readme_is_valid() {
+        let readme = include_str!("../../README.md");
+        let start = readme.find("```toml\n").unwrap() + "```toml\n".len();
+        let end = start + readme[start..].find("```").unwrap();
+        let config = Config::parse(&readme[start..end]).unwrap();
+        assert!(config.shell_integration);
+        assert_eq!(config.restore.run, Run::Matching);
+    }
+
     fn temp_file(name: &str) -> PathBuf {
         env::temp_dir().join(format!("ttylde-{}-{name}", std::process::id()))
     }
