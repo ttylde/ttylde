@@ -473,7 +473,8 @@ body {
    button of the space menu. */
 body.collapsed .header-space {
   gap: 7px;
-  margin: 0 10px 0 -8px;
+  /* Past the traffic lights, which are wider than the rail. */
+  margin: 0 10px 0 4px;
   padding: 4px 9px;
   border-radius: 7px;
   color: var(--ink);
@@ -965,12 +966,6 @@ body.collapsed #footer {
 /* The same icon, pointing the other way. */
 body.collapsed #toggle-sidebar svg {
   transform: rotate(180deg);
-}
-
-/* The traffic lights are wider than the rail: the terminal starts below
-   them, and the rail no longer keeps it from the edge of the window. */
-body.collapsed #stage {
-  padding: 44px 12px 12px 0;
 }
 
 /* What opens over the window: the menu of a row, the rename popover. A
