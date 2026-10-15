@@ -5,6 +5,7 @@ mod saved;
 mod sessions;
 
 use sessions::Sessions;
+use tauri::Manager;
 use ttylde_core::config::{self, Config};
 
 fn main() {
@@ -17,8 +18,18 @@ fn main() {
         });
 
     tauri::Builder::default()
-        .manage(Sessions::default())
         .manage(config)
+        .setup(|app| {
+            // Copied there from core/shell-integration, by `tauri dev` too.
+            let scripts = app
+                .path()
+                .resource_dir()
+                .map(|dir| dir.join("shell-integration"))
+                .inspect_err(|e| eprintln!("ttylde: no shell integration: {e}"))
+                .ok();
+            app.manage(Sessions::new(scripts));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             sessions::config_font,
             sessions::session_open,
@@ -34,6 +45,7 @@ fn main() {
             sessions::session_selection_text,
             sessions::session_close,
             sessions::session_focus,
+            sessions::restore_runs_by_itself,
             saved::state_load,
             saved::state_save,
         ])
