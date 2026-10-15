@@ -46,15 +46,26 @@ impl Shell {
     pub fn start(cmd: CommandBuilder) -> Shell {
         let pty = Pty::spawn(cmd, 80, 24).unwrap();
         let mut reader = pty.reader().unwrap();
+        let writer = pty.writer();
         let output = Arc::new(Mutex::new(Vec::new()));
         let shared = Arc::clone(&output);
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut answered = 0;
             while let Ok(n) = reader.read(&mut buf) {
                 if n == 0 {
                     break;
                 }
-                shared.lock().unwrap().extend_from_slice(&buf[..n]);
+                let mut output = shared.lock().unwrap();
+                output.extend_from_slice(&buf[..n]);
+                // fish 4 asks what the terminal is (DA1) and shows no
+                // prompt before the answer, which the emulator gives in
+                // the app.
+                let asked = output.windows(4).filter(|w| w == b"\x1b[0c").count();
+                for _ in answered..asked {
+                    let _ = writer.write(b"\x1b[?62;22c");
+                }
+                answered = asked;
             }
         });
         Shell { pty, output }
