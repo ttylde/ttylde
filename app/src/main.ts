@@ -6,6 +6,7 @@ import { SIDEBAR_ICON } from "./icons";
 import { attachKeyboard } from "./input";
 import { Launcher } from "./launcher";
 import { isMenuOpen, openMenu } from "./menu";
+import { OfferBanner } from "./offer";
 import { fontStack } from "./renderer";
 import { actionOf, NEW_TAB_HINT } from "./shortcuts";
 import { ago, tabCount } from "./space";
@@ -98,6 +99,7 @@ const tabs = new Tabs({
   // the background of what is drawn in it. With no tab, the launcher.
   onActiveChange(tab) {
     document.body.classList.toggle("empty", tab === null);
+    offer.show(tab?.offer ?? null);
     if (!tab) {
       void appWindow.setTitle(DEFAULT_TITLE);
       terminal.style.background = "";
@@ -154,6 +156,15 @@ const launcher = new Launcher({
       if (tab) void invoke("session_write", { id: tab.id, text: `${command}\r` });
     }),
 });
+const offer = new OfferBanner({
+  root: element("#offer"),
+  onAccept: () => tabs.acceptOffer(),
+  onDismiss: () => tabs.dismissOffer(),
+});
+
+// Keys that are only modifiers, pressed on their own on the way to another.
+const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
+
 // The window gives the focus back to the terminal: with no tab, it is the
 // prompt of the launcher that wants it.
 window.addEventListener("focus", () => launcher.focus());
@@ -248,7 +259,10 @@ window.addEventListener(
     // takes them for itself.
     if (isFormOpen() || isMenuOpen()) return;
     const action = actionOf(e);
-    if (!action) return;
+    if (!action) {
+      answerOffer(e);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     switch (action.type) {
@@ -271,6 +285,22 @@ window.addEventListener(
   },
   { capture: true },
 );
+
+// With the banner of a command to start again: Enter starts it, Escape
+// leaves the tab at its prompt, and any other key for the terminal does
+// too, on its way there.
+function answerOffer(e: KeyboardEvent): void {
+  if (!offer.visible || e.metaKey || e.isComposing || MODIFIERS.has(e.key)) return;
+  const plain = !e.shiftKey && !e.altKey && !e.ctrlKey;
+  if (plain && (e.key === "Enter" || e.key === "Escape")) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Enter") tabs.acceptOffer();
+    else tabs.dismissOffer();
+    return;
+  }
+  tabs.dismissOffer();
+}
 
 tabs.restore(saved);
 started = true;

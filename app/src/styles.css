@@ -445,6 +445,71 @@ body {
   display: none;
 }
 
+/* A command that was running when the tab closed, offered to start again:
+   over the top of the terminal, out of the way of the prompt below. */
+#offer {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 28px);
+  box-sizing: border-box;
+  padding: 6px 6px 6px 12px;
+  border-radius: 9px;
+  background: var(--raised);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-button);
+  color: var(--muted);
+  font: 12px var(--ui);
+  cursor: pointer;
+}
+
+#offer[hidden] {
+  display: none;
+}
+
+.offer-text {
+  flex: none;
+}
+
+.offer-command {
+  overflow: hidden;
+  color: var(--ink);
+  font: 12px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.offer-key {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--panel);
+  box-shadow: var(--shadow-row);
+  color: var(--ink);
+}
+
+.offer-dismiss {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--faint);
+  font: 14px / 1 var(--ui);
+  cursor: pointer;
+}
+
+.offer-dismiss:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
 /* What the terminal area shows with no space open. It lies over the
    canvases, which keep their size for the tab that comes next. */
 #launcher {

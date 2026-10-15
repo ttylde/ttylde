@@ -12,9 +12,11 @@ import {
   focusTab,
   openTab,
   resizeTab,
+  runsByItself,
   type Tab,
   type TabHandlers,
   type TabStart,
+  typeCommand,
 } from "./tab";
 import type { Font, SavedState, SavedTab } from "./types";
 
@@ -26,6 +28,12 @@ const DRAG_THRESHOLD = 4;
 
 /** Where the pinned tabs are: no space, but seen from every one. */
 const PINNED = "pinned";
+
+/**
+ * How long a command to start again by itself waits for the first prompt:
+ * a shell without the integration never shows one, and takes it typed.
+ */
+const READY_TIMEOUT = 3000;
 
 /** Where a tab belongs: a space, none (`null`), or the pinned ones. */
 type Place = Space | null | typeof PINNED;
@@ -40,10 +48,13 @@ type Entry = {
 };
 
 /**
- * What is kept of a closed space: for each tab what it looked like and the
- * folder it was in, and which one was shown.
+ * What is kept of a tab that closes: what it looked like, the folder it was
+ * in, the last command it ran and the one still running, to start again.
  */
-type Saved = { tabs: { look: Look; cwd: string | null }[]; shown: number; closedAt: number };
+type Kept = { look: Look; cwd: string | null; command: string | null; restart: string | null };
+
+/** What is kept of a closed space: its tabs, and which one was shown. */
+type Saved = { tabs: Kept[]; shown: number; closedAt: number };
 
 /** A closed space as the launcher lists it. */
 export type ClosedSpace = {
@@ -127,6 +138,8 @@ export class Tabs {
   // The tab the popover is editing, and the one a menu is open on.
   private renaming: Tab | null = null;
   private inMenu: Tab | null = null;
+  // Tabs whose command starts again by itself at the first prompt.
+  private waiting = new Map<Tab, string>();
   constructor(private options: TabsOptions) {}
 
   /** Session id of the visible tab, the one the keyboard writes to. */
@@ -180,11 +193,10 @@ export class Tabs {
           ...space,
           closed_at: saved?.closedAt ?? null,
           shown,
-          tabs: tabs.map(({ look, cwd }) => ({ ...look, cwd })),
+          tabs: tabs.map(toSaved),
         };
       }),
-      pinned:
-        this.starting ?? this.tabsOf(PINNED).map(({ tab }) => ({ ...tab.look, cwd: tab.cwd })),
+      pinned: this.starting ?? this.tabsOf(PINNED).map(({ tab }) => toSaved(kept(tab))),
     };
   }
 
@@ -207,7 +219,7 @@ export class Tabs {
     }));
     kept.forEach((saved, index) => {
       this.closed.set(this.spaces[index], {
-        tabs: saved.tabs.map(({ cwd, ...look }) => ({ look, cwd })),
+        tabs: saved.tabs.map(fromSaved),
         shown: saved.shown,
         closedAt: saved.closed_at ?? quit,
       });
@@ -222,9 +234,9 @@ export class Tabs {
   // in the order they had. One that cannot start is left out.
   private async startPinned(tabs: SavedTab[]): Promise<void> {
     this.starting = tabs;
-    for (const { cwd, ...look } of tabs) {
+    for (const tab of tabs.map(fromSaved)) {
       try {
-        await this.openIn(PINNED, { cwd: cwd ?? "~", shell: null }, look);
+        await this.openIn(PINNED, { cwd: tab.cwd ?? "~", shell: null }, tab);
       } catch {}
     }
     this.starting = null;
@@ -243,13 +255,14 @@ export class Tabs {
     return this.openIn(place, start, null);
   }
 
-  // Opens a tab at the end of `space`, with the look it had if it is one
-  // that was saved. A new tab is shown; one that is coming back only if
-  // its space shows nothing yet.
-  private async openIn(place: Place, start: TabStart, look: Look | null): Promise<Tab | null> {
+  // Opens a tab at the end of `space`, as it was if it is one that was
+  // kept. A new tab is shown; one that is coming back only if its space
+  // shows nothing yet.
+  private async openIn(place: Place, start: TabStart, from: Kept | null): Promise<Tab | null> {
     const { list, pinned, screens, textarea, font } = this.options;
     const handlers: TabHandlers = {
       onTitle: (tab) => this.retitle(tab),
+      onCommand: (tab) => this.commandChanged(tab),
       onBackground: (tab) => {
         if (tab === this.active) this.options.onActiveChange(tab);
       },
@@ -276,7 +289,10 @@ export class Tabs {
       this.leaveIfEmpty(place);
       return null;
     }
-    if (look) tab.look = look;
+    if (from) {
+      tab.look = from.look;
+      tab.command = from.command;
+    }
 
     const row = document.createElement("div");
     row.className = "tab";
@@ -319,13 +335,62 @@ export class Tabs {
     this.entries.push({ tab, space: place, row, icon, label, branch });
     this.retitle(tab);
     if (place === this.space) {
-      if (!look || !this.lastTab.has(place)) this.activate(tab);
+      if (!from || !this.lastTab.has(place)) this.activate(tab);
     } else if (place !== PINNED) {
       // Its space is not the one shown any more: it waits there.
       row.hidden = true;
       this.lastTab.set(place, tab);
     }
+    if (from?.restart) void this.offer(tab, from.restart);
     return tab;
+  }
+
+  /** The visible tab offers to start a command again: start it. */
+  acceptOffer(): void {
+    const tab = this.active;
+    if (!tab?.offer) return;
+    typeCommand(tab, tab.offer);
+    tab.offer = null;
+    this.commandChanged(tab);
+  }
+
+  /** The visible tab offers to start a command again: leave it at its prompt. */
+  dismissOffer(): void {
+    const tab = this.active;
+    if (!tab?.offer) return;
+    tab.offer = null;
+    this.commandChanged(tab);
+  }
+
+  // `command` was running in `tab` when it closed. As the config file says,
+  // it starts again by itself once the shell is ready, or a banner offers it.
+  private async offer(tab: Tab, command: string): Promise<void> {
+    if (!(await runsByItself(command))) {
+      tab.offer = command;
+      this.commandChanged(tab);
+      return;
+    }
+    if (tab.ready) {
+      typeCommand(tab, command);
+      return;
+    }
+    this.waiting.set(tab, command);
+    window.setTimeout(() => this.runWaiting(tab), READY_TIMEOUT);
+  }
+
+  // Starts the command `tab` was waiting to start by itself, if any.
+  private runWaiting(tab: Tab): void {
+    const command = this.waiting.get(tab);
+    if (command === undefined) return;
+    this.waiting.delete(tab);
+    if (!tab.exited) typeCommand(tab, command);
+  }
+
+  // A command of `tab` started or ended, or the shell is ready.
+  private commandChanged(tab: Tab): void {
+    if (tab.ready) this.runWaiting(tab);
+    if (tab === this.active) this.options.onActiveChange(tab);
+    this.changed();
   }
 
   /**
@@ -408,7 +473,7 @@ export class Tabs {
     const saved = this.closed.get(space);
     if (saved || target === "new") {
       const into = saved ?? { tabs: [], shown: 0, closedAt: Date.now() };
-      into.tabs.push({ look: tab.look, cwd: tab.cwd });
+      into.tabs.push(kept(tab));
       this.closed.set(space, into);
       this.close(tab);
       this.announce();
@@ -545,7 +610,7 @@ export class Tabs {
     const entries = this.tabsOf(space);
     const last = this.lastTab.get(space);
     return {
-      tabs: entries.map(({ tab }) => ({ look: tab.look, cwd: tab.cwd })),
+      tabs: entries.map(({ tab }) => kept(tab)),
       shown: Math.max(
         0,
         entries.findIndex((entry) => entry.tab === last),
@@ -571,9 +636,9 @@ export class Tabs {
     if (!saved) return;
     this.closed.delete(space);
     this.show(space);
-    for (const { look, cwd } of saved.tabs) {
+    for (const tab of saved.tabs) {
       try {
-        await this.openIn(space, { cwd: cwd ?? space.folder, shell: space.shell }, look);
+        await this.openIn(space, { cwd: tab.cwd ?? space.folder, shell: space.shell }, tab);
       } catch {
         // A tab that cannot start again is left out: the others still can.
       }
@@ -878,6 +943,7 @@ export class Tabs {
     if (tab === this.renaming) closeForm();
     if (tab === this.inMenu) closeMenu();
     this.entries.splice(this.entries.indexOf(entry), 1);
+    this.waiting.delete(tab);
     entry.row.remove();
     closeTab(tab);
     this.changed();
@@ -921,4 +987,21 @@ export class Tabs {
     if (place !== this.space) this.announce();
     else this.show(next ?? null);
   }
+}
+
+/**
+ * What is kept of an open tab. A command offered and not answered yet is
+ * still one to start again.
+ */
+function kept(tab: Tab): Kept {
+  return { look: tab.look, cwd: tab.cwd, command: tab.command, restart: tab.restart ?? tab.offer };
+}
+
+function toSaved({ look, cwd, command, restart }: Kept): SavedTab {
+  return { ...look, cwd, command, restart };
+}
+
+// A file from before the commands were kept has none.
+function fromSaved({ cwd, command, restart, ...look }: SavedTab): Kept {
+  return { look, cwd, command: command ?? null, restart: restart ?? null };
 }
