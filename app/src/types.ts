@@ -31,7 +31,16 @@ export type Frame = {
 export type Font = { family: string; size: number };
 
 /** Mirror of `Tab` in core/src/state.rs. */
-export type SavedTab = { name: string | null; color: string; icon: string; cwd: string | null };
+export type SavedTab = {
+  name: string | null;
+  color: string;
+  icon: string;
+  cwd: string | null;
+  /** The last command it ran. */
+  command: string | null;
+  /** The command running in it when it closed, to start again. */
+  restart: string | null;
+};
 
 /** Mirror of `Space` in core/src/state.rs. `closed_at`: `null` if it is open. */
 export type SavedSpace = {
@@ -65,6 +74,10 @@ export type SessionEvent =
   | { type: "Cwd"; data: string }
   | { type: "Git"; data: GitStatus | null }
   | { type: "Bell" }
+  | { type: "Prompt" }
+  | { type: "CommandStart"; data: string | null }
+  | { type: "CommandRunning"; data: string }
+  | { type: "CommandEnd"; data: number | null }
   | { type: "Exit" };
 
 // Same bits as SegmentFlags in the core.

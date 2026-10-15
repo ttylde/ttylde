@@ -8,7 +8,8 @@
 use std::{
     env,
     ffi::OsString,
-    fs, io,
+    fs,
+    io::{self, Write},
     path::{Path, PathBuf},
 };
 
@@ -64,6 +65,13 @@ pub struct Tab {
     /// The folder it was in; `None` if it never said.
     #[serde(default)]
     pub cwd: Option<String>,
+    /// The last command it ran, if its shell has the integration.
+    #[serde(default)]
+    pub command: Option<String>,
+    /// The command still running in it when it closed: resuming offers to
+    /// start it again.
+    #[serde(default)]
+    pub restart: Option<String>,
 }
 
 /// Reads the file at `path`. A missing file is not an error: it means
@@ -88,9 +96,21 @@ pub fn save(state: &State, path: &Path) -> Result<()> {
 
     // Next to the file, not in `/tmp`: a rename within one folder is atomic.
     let temporary = with_suffix(path, ".tmp");
-    fs::write(&temporary, text)?;
+    private_file(&temporary)?.write_all(text.as_bytes())?;
     fs::rename(&temporary, path)?;
     Ok(())
+}
+
+// A file only its owner can read: the state has the commands the user ran.
+fn private_file(path: &Path) -> io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
 }
 
 /// Moves a file that could not be read out of the way, to `<name>.broken`,
@@ -154,12 +174,16 @@ mod tests {
                             color: "#1f9a6a".to_string(),
                             icon: "server".to_string(),
                             cwd: Some("/Users/me/work/api".to_string()),
+                            command: Some("npm run dev".to_string()),
+                            restart: Some("npm run dev".to_string()),
                         },
                         Tab {
                             name: None,
                             color: "#5f6f68".to_string(),
                             icon: "terminal".to_string(),
                             cwd: None,
+                            command: Some("git status".to_string()),
+                            restart: None,
                         },
                     ],
                 },
@@ -176,6 +200,8 @@ mod tests {
                         color: "#5f6f68".to_string(),
                         icon: "terminal".to_string(),
                         cwd: Some("/tmp".to_string()),
+                        command: None,
+                        restart: None,
                     }],
                 },
             ],
@@ -184,6 +210,8 @@ mod tests {
                 color: "#c2410c".to_string(),
                 icon: "book".to_string(),
                 cwd: Some("/Users/me/notes".to_string()),
+                command: None,
+                restart: None,
             }],
         }
     }
@@ -236,6 +264,18 @@ mod tests {
         let space = &state.spaces[0];
         assert_eq!((space.shell.clone(), space.closed_at), (None, None));
         assert_eq!((space.shown, space.tabs.len()), (0, 0));
+    }
+
+    // The commands the user ran are in it: only the user reads it.
+    #[cfg(unix)]
+    #[test]
+    fn only_its_owner_can_read_the_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let path = temp_folder("private").join("state.toml");
+        save(&sample(), &path).unwrap();
+
+        let mode = fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
     }
 
     #[test]

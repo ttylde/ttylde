@@ -5,6 +5,7 @@
 //! `Channel`.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
@@ -15,17 +16,28 @@ use ttylde_core::config::{Config, Font};
 use ttylde_core::emulator::{SelectionKind, SelectionSide};
 use ttylde_core::input::{Key, Mods, MouseEvent};
 use ttylde_core::session::{Session, SessionEvent};
+use ttylde_core::shell;
 
 const NO_SUCH_SESSION: &str = "no such session";
 
 /// Registry of open sessions, shared by the commands.
-#[derive(Default)]
 pub struct Sessions {
     next_id: AtomicU32,
     open: Mutex<HashMap<u32, Session>>,
+    /// The shell integration scripts the app ships, `None` if the folder of
+    /// its resources is not known: the shells then start without them.
+    scripts: Option<PathBuf>,
 }
 
 impl Sessions {
+    pub fn new(scripts: Option<PathBuf>) -> Self {
+        Sessions {
+            next_id: AtomicU32::new(0),
+            open: Mutex::new(HashMap::new()),
+            scripts,
+        }
+    }
+
     fn allocate_id(&self) -> u32 {
         self.next_id.fetch_add(1, Ordering::Relaxed)
     }
@@ -48,14 +60,9 @@ pub fn session_open(
     on_event: Channel<SessionEvent>,
 ) -> Result<u32, String> {
     // The user's shell, launched as a login shell like Terminal.app does.
-    let mut cmd = match shell {
-        Some(shell) => {
-            let mut cmd = CommandBuilder::new(&shell);
-            cmd.arg("-l");
-            cmd
-        }
-        None => CommandBuilder::new_default_prog(),
-    };
+    let program = shell.unwrap_or_else(|| CommandBuilder::new_default_prog().get_shell());
+    let mut cmd = CommandBuilder::new(&program);
+    cmd.arg("-l");
 
     let home = std::env::home_dir();
     if let Some(cwd) = cwd {
@@ -70,6 +77,9 @@ pub fn session_open(
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", "Ttylde");
+    if let (true, Some(scripts)) = (config.shell_integration, &state.scripts) {
+        shell::integrate(&mut cmd, program.as_ref(), scripts, &shell::nonce());
+    }
 
     let session = Session::spawn(
         cmd,
@@ -200,6 +210,13 @@ pub fn session_focus(state: State<'_, Sessions>, id: u32, focused: bool) -> Resu
     state
         .with_session(id, |session| session.focus(focused))?
         .map_err(|e| e.to_string())
+}
+
+/// Whether a command that was running when its space was closed starts
+/// again by itself on resume, as the config file says, or waits for Enter.
+#[tauri::command]
+pub fn restore_runs_by_itself(config: State<'_, Config>, command: String) -> bool {
+    config.restore.runs_by_itself(&command)
 }
 
 /// Font family and size from the config file, for the renderer.

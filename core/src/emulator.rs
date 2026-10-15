@@ -26,8 +26,9 @@ use alacritty_terminal::{
 };
 
 use crate::{
+    command::Mark,
     cwd::Location,
-    emulator::osc::OscWatcher,
+    emulator::osc::{Announcement, OscWatcher},
     frame::{Cursor, CursorShape, Frame, LineUpdate, Segment, SegmentFlags},
     input::{InputMode, MouseTracking},
     theme::Theme,
@@ -45,6 +46,7 @@ pub enum EmulatorEvent {
     Bell,
     Write(Vec<u8>),
     Location(Location),
+    Mark(Mark),
 }
 
 struct Size {
@@ -394,8 +396,17 @@ impl Emulator {
             })
             .collect();
 
-        events.extend(self.osc.take().into_iter().map(EmulatorEvent::Location));
+        events.extend(self.osc.take().into_iter().map(|a| match a {
+            Announcement::Location(location) => EmulatorEvent::Location(location),
+            Announcement::Mark(mark) => EmulatorEvent::Mark(mark),
+        }));
         events
+    }
+
+    /// The secret the session's shell puts in the marks that carry the
+    /// text of a command; `None`: no text is believed.
+    pub fn set_nonce(&mut self, nonce: Option<String>) {
+        self.osc.nonce = nonce;
     }
 
     /// Tells the emulator whether its window has the focus.

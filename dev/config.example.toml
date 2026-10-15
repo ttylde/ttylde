@@ -1,0 +1,40 @@
+# The config of debug builds, the ones `pnpm tauri dev` runs. Copy it to
+# `.dev/config.toml` at the root of the repository and change what you need:
+#
+#   mkdir -p .dev && cp dev/config.example.toml .dev/config.toml
+#
+# Debug builds keep everything in `.dev/` (config, state), out of git, and
+# never touch the files of the installed app. Without `.dev/config.toml`
+# they start with the defaults below.
+#
+# Every line is optional: one left out, or commented out, keeps its default.
+# The installed app reads the same options from ~/.config/ttylde/config.toml.
+
+# Whether the shells Ttylde starts (zsh, fish) load its integration: the
+# last command of each tab, and the one to start again on resume. No file
+# of the user is changed.
+# shell_integration = true
+
+[font]
+# family = "JetBrains Mono"   # ships with the app
+# size = 13                   # between 6 and 72
+
+[theme]
+# base = "light"              # "light" or "dark"
+# Any of these replaces the color of the base theme:
+# foreground = "#d8d8d2"
+# background = "#16161a"
+# cursor = "#e8e8e2"
+# selection = "#3a3f58"
+# ansi = ["#000000", ...]     # the 16 ANSI colors, all of them or none
+
+[restore]
+# What happens, when a space is resumed, to the commands that were running
+# in its tabs when it was closed:
+#   "ask"      a banner offers to run each one again with Enter
+#   "all"      every one runs again by itself
+#   "matching" the ones matching a pattern run again by themselves, the
+#              others get the banner
+# run = "ask"
+# Globs on the whole command: `*` is any text, `?` any one character.
+# match = ["npm run *", "cargo watch *"]

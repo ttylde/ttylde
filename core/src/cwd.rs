@@ -28,7 +28,7 @@ pub fn parse_osc7(uri: &str) -> Option<Location> {
     })
 }
 
-fn percent_decode(uri: &str) -> Option<Vec<u8>> {
+pub(crate) fn percent_decode(uri: &str) -> Option<Vec<u8>> {
     let bytes = uri.as_bytes();
     let mut output: Vec<u8> = Vec::new();
 

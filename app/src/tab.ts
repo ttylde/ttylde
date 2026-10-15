@@ -16,6 +16,17 @@ export type Tab = {
   cwd: string | null;
   /** Repository of that folder, `null` when it is in none. */
   git: GitStatus | null;
+  /**
+   * The last command the shell ran, `null` until one is known. Only from a
+   * shell with the integration, as the three below.
+   */
+  command: string | null;
+  /** The command still running in the foreground: one to start again. */
+  restart: string | null;
+  /** The shell has shown its first prompt. */
+  ready: boolean;
+  /** A command that was running last time, offered to start again. */
+  offer: string | null;
   /** Name, color and icon the user chose. */
   look: Look;
   /** Background of the last frame, `null` before the first one. */
@@ -40,6 +51,8 @@ export type TabStart = {
 export type TabHandlers = {
   /** The title, the folder or its repository changed. */
   onTitle(tab: Tab): void;
+  /** A command started or ended, or the shell shows a prompt. */
+  onCommand(tab: Tab): void;
   onBackground(tab: Tab): void;
   onExit(tab: Tab): void;
 };
@@ -70,6 +83,10 @@ export async function openTab(
     title: null,
     cwd: null,
     git: null,
+    command: null,
+    restart: null,
+    ready: false,
+    offer: null,
     look: defaultLook(),
     background: null,
     canvas,
@@ -106,6 +123,25 @@ export async function openTab(
         tab.git = event.data;
         handlers.onTitle(tab);
         break;
+      case "Prompt":
+        tab.ready = true;
+        handlers.onCommand(tab);
+        break;
+      case "CommandStart":
+        if (event.data !== null) tab.command = event.data;
+        tab.restart = null;
+        // Another command than the one offered: the offer is over.
+        tab.offer = null;
+        handlers.onCommand(tab);
+        break;
+      case "CommandRunning":
+        tab.restart = event.data;
+        handlers.onCommand(tab);
+        break;
+      case "CommandEnd":
+        tab.restart = null;
+        handlers.onCommand(tab);
+        break;
       case "Bell":
         flashBell(canvas);
         break;
@@ -133,6 +169,23 @@ export async function openTab(
  */
 export function defaultTitle(tab: Tab): string | null {
   return tab.cwd === null ? tab.title : folderName(tab.cwd);
+}
+
+/** Types `command` into the shell of `tab` and runs it, as if the user had. */
+export function typeCommand(tab: Tab, command: string): void {
+  if (tab.id >= 0) void invoke("session_write", { id: tab.id, text: `${command}\r` });
+}
+
+/**
+ * Whether a command that was running when its tab closed starts again by
+ * itself, as the config file says, rather than waiting for Enter.
+ */
+export async function runsByItself(command: string): Promise<boolean> {
+  try {
+    return await invoke<boolean>("restore_runs_by_itself", { command });
+  } catch {
+    return false;
+  }
 }
 
 /** Closes the session and removes everything `openTab` created. */

@@ -1,4 +1,5 @@
-//! The config file: font and theme, in TOML.
+//! The config file: font, theme, shell integration and what to start again
+//! on resume, in TOML.
 //!
 //! Everything in the file is optional. Serde checks its shape through the
 //! `Raw*` types, where every field may be missing; the values are checked
@@ -18,10 +19,92 @@ use crate::{
     theme::Theme,
 };
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub font: Font,
     pub theme: Theme,
+    /// Whether the shells Ttylde starts load its integration (see `shell`).
+    /// On unless the file turns it off.
+    pub shell_integration: bool,
+    pub restore: Restore,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            font: Font::default(),
+            theme: Theme::default(),
+            shell_integration: true,
+            restore: Restore::default(),
+        }
+    }
+}
+
+/// What happens, when a space is resumed, to the commands that were running
+/// in its tabs when it was closed.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Restore {
+    pub run: Run,
+    /// Globs on the text of a command, for `Run::Matching`: `*` is any text,
+    /// `?` any one character.
+    pub patterns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Run {
+    /// A banner offers to start each one again with Enter.
+    #[default]
+    Ask,
+    /// Every one starts again by itself.
+    All,
+    /// The ones that match a pattern start again by itself, the others get
+    /// the banner.
+    Matching,
+}
+
+impl Restore {
+    /// Whether `command` starts again without asking.
+    pub fn runs_by_itself(&self, command: &str) -> bool {
+        match self.run {
+            Run::Ask => false,
+            Run::All => true,
+            Run::Matching => self.patterns.iter().any(|p| glob(p, command)),
+        }
+    }
+}
+
+/// Whether `text` matches `pattern` whole: `*` is any text, `?` any one
+/// character, the rest stands for itself.
+fn glob(pattern: &str, text: &str) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    // Where to go back to at the last `*`: its position, and the text it
+    // has taken so far.
+    let mut star: Option<(usize, usize)> = None;
+    let (mut p, mut t) = (0, 0);
+    while t < text.len() {
+        match pattern.get(p) {
+            Some('*') => {
+                star = Some((p, t));
+                p += 1;
+            }
+            Some(&c) if c == '?' || c == text[t] => {
+                p += 1;
+                t += 1;
+            }
+            _ => match star {
+                // The `*` takes one more character, and the rest is tried again.
+                Some((sp, st)) => {
+                    star = Some((sp, st + 1));
+                    p = sp + 1;
+                    t = st + 1;
+                }
+                None => return false,
+            },
+        }
+    }
+    pattern[p..].iter().all(|&c| c == '*')
 }
 
 /// Sent to the frontend as it is: the renderer draws with it.
@@ -63,6 +146,11 @@ impl Config {
         let d_theme = base(parsed.theme.base)?;
 
         let config: Config = Config {
+            shell_integration: parsed.shell_integration.unwrap_or(true),
+            restore: Restore {
+                run: run(parsed.restore.run)?,
+                patterns: parsed.restore.patterns.unwrap_or_default(),
+            },
             font: Font {
                 family: parsed.font.family.unwrap_or(d_font.family),
                 size: size(parsed.font.size, d_font.size)?,
@@ -93,6 +181,16 @@ impl Config {
 struct RawConfig {
     font: RawFont,
     theme: RawTheme,
+    shell_integration: Option<bool>,
+    restore: RawRestore,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+struct RawRestore {
+    run: Option<String>,
+    #[serde(rename = "match")]
+    patterns: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default)]
@@ -161,6 +259,18 @@ fn ansi(value: Option<Vec<String>>, default: [u32; 16]) -> Result<[u32; 16]> {
         colors[i] = color(&format!("theme.ansi[{i}]"), Some(text), default[i])?;
     }
     Ok(colors)
+}
+
+/// What to start again on resume: `ask`, the default, `all` or `matching`.
+fn run(value: Option<String>) -> Result<Run> {
+    match value.as_deref() {
+        None | Some("ask") => Ok(Run::Ask),
+        Some("all") => Ok(Run::All),
+        Some("matching") => Ok(Run::Matching),
+        Some(other) => Err(Error::Config(format!(
+            "restore.run: `{other}` is not `ask`, `all` or `matching`"
+        ))),
+    }
 }
 
 /// The font size the file sets, or `default` if it leaves it out.
@@ -365,6 +475,101 @@ mod tests {
     fn wrong_types_and_broken_toml_are_errors() {
         config_error("[font]\nsize = \"big\"");
         config_error("[font\nsize = 12");
+    }
+
+    #[test]
+    fn shell_integration_is_on_unless_turned_off() {
+        assert!(Config::parse("").unwrap().shell_integration);
+        assert!(
+            !Config::parse("shell_integration = false")
+                .unwrap()
+                .shell_integration
+        );
+    }
+
+    #[test]
+    fn restore_asks_by_default() {
+        let restore = Config::parse("").unwrap().restore;
+        assert_eq!(restore.run, Run::Ask);
+        assert!(!restore.runs_by_itself("npm run dev"));
+    }
+
+    #[test]
+    fn restore_can_run_everything() {
+        let restore = Config::parse("[restore]\nrun = \"all\"").unwrap().restore;
+        assert!(restore.runs_by_itself("rm -rf build"));
+    }
+
+    // The patterns are on the whole text: `npm run *` is not `npm publish`.
+    #[test]
+    fn restore_can_run_what_matches() {
+        let restore = Config::parse(
+            r#"
+            [restore]
+            run = "matching"
+            match = ["npm run *", "cargo watch*"]
+            "#,
+        )
+        .unwrap()
+        .restore;
+
+        assert!(restore.runs_by_itself("npm run dev"));
+        assert!(restore.runs_by_itself("cargo watch -x test"));
+        assert!(!restore.runs_by_itself("npm publish"));
+        assert!(!restore.runs_by_itself("sudo npm run dev"));
+    }
+
+    #[test]
+    fn an_unknown_restore_mode_is_an_error() {
+        let message = config_error("[restore]\nrun = \"always\"");
+        assert!(message.contains("restore.run"), "{message}");
+    }
+
+    #[test]
+    fn globs_match_the_whole_text() {
+        assert!(glob("npm run *", "npm run dev"));
+        assert!(glob("npm run *", "npm run "));
+        assert!(!glob("npm run *", "npm run"));
+        assert!(glob("*", ""));
+        assert!(glob("*dev*", "npm run dev -- --port 3000"));
+        assert!(glob("make ?", "make a"));
+        assert!(!glob("make ?", "make ab"));
+        assert!(glob("a*b*c", "a-b-b-c"));
+        assert!(!glob("a*b*c", "a-b-b-d"));
+        assert!(glob("caffè *", "caffè lungo"));
+        assert!(!glob("ls", "ls -la"));
+    }
+
+    // The file debug builds start from: as it is, and with every option
+    // turned on, it is a valid config.
+    #[test]
+    fn the_example_config_is_valid() {
+        let example = include_str!("../../dev/config.example.toml");
+        assert_eq!(Config::parse(example).unwrap(), Config::default());
+
+        let uncommented: String = example
+            .lines()
+            .filter(|line| !line.contains("..."))
+            .map(|line| match line.strip_prefix("# ") {
+                Some(option) if option.contains(" = ") => option,
+                _ => line,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let config = Config::parse(&uncommented).unwrap();
+        assert_eq!(config.restore.run, Run::Ask);
+        assert_eq!(config.restore.patterns.len(), 2);
+    }
+
+    // The example in the README, between ```toml and ```.
+    #[test]
+    fn the_config_in_the_readme_is_valid() {
+        let readme = include_str!("../../README.md");
+        let start = readme.find("```toml\n").unwrap() + "```toml\n".len();
+        let end = start + readme[start..].find("```").unwrap();
+        let config = Config::parse(&readme[start..end]).unwrap();
+        assert!(config.shell_integration);
+        assert_eq!(config.restore.run, Run::Matching);
     }
 
     fn temp_file(name: &str) -> PathBuf {

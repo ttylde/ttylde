@@ -33,6 +33,11 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 Ttylde reads `~/.config/ttylde/config.toml` (or `$XDG_CONFIG_HOME/ttylde/config.toml`) once at startup. Everything in it is optional; a file with a mistake is reported on stderr and ignored.
 
 ```toml
+# The shells Ttylde starts (zsh, fish) load its integration, without any of
+# your files being changed: each tab knows its last command, and the one
+# still running when it closed. `false` starts them exactly as they would.
+shell_integration = true
+
 [font]
 family = "JetBrains Mono"  # the default: it ships with the app
 size = 13                  # between 6 and 72
@@ -45,11 +50,21 @@ background = "#16161a"
 cursor = "#e8e8e2"
 selection = "#3a3f58"
 # ansi = ["#000000", ...]  # the 16 ANSI colors, all of them or none
+
+[restore]
+# Resuming a space, a command that was running in one of its tabs:
+# "ask" (the default) shows a banner that runs it again with Enter,
+# "all" runs every one again by itself, "matching" runs again by itself
+# what matches a pattern below and asks for the rest.
+run = "matching"
+match = ["npm run *", "cargo watch *"]  # globs on the whole command
 ```
+
+A command typed with a space in front is never kept, as with `HIST_IGNORE_SPACE`. Nothing the output of a program prints can pass for a command: the shell signs what it sends with a secret Ttylde gives it.
 
 The app opens on the launcher: the space you were in, ready to resume with `Enter`, the other closed spaces, and a prompt where typing a command starts a new session. Closing the last open space brings it back. Tabs opened while no space is open belong to none, as in a plain terminal, and are not kept across restarts; opening a space asks whether they come along, and **Move to space…** in the menu of a tab moves it, session alive.
 
-Spaces and tabs are kept across restarts in `~/.local/state/ttylde/state.toml` (or `$XDG_STATE_HOME/ttylde/state.toml`). The app writes it: it is not meant to be edited. A file it cannot read is moved aside to `state.toml.broken`, and the app starts as on a first run.
+Spaces and tabs are kept across restarts in `~/.local/state/ttylde/state.toml` (or `$XDG_STATE_HOME/ttylde/state.toml`), only you can read it: it has the last command of each tab. The app writes it: it is not meant to be edited. A file it cannot read is moved aside to `state.toml.broken`, and the app starts as on a first run.
 
 ## Running it
 
@@ -59,6 +74,12 @@ Requirements: Rust (stable), Node.js, [pnpm](https://pnpm.io).
 cd app
 pnpm install
 pnpm tauri dev
+```
+
+A debug build keeps its config and its state in `.dev/` at the root of the repository, out of git, and never touches the files of the installed app: `rm -rf .dev` starts over. It starts with the default config; to change it:
+
+```sh
+mkdir -p .dev && cp dev/config.example.toml .dev/config.toml
 ```
 
 The app icons are generated from `assets/icons/full.png`; after changing it:
