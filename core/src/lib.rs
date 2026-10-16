@@ -9,6 +9,7 @@ pub mod emulator;
 pub mod error;
 pub mod frame;
 pub mod git;
+pub mod history;
 pub mod input;
 pub mod pty;
 pub mod session;

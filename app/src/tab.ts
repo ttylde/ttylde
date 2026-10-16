@@ -204,6 +204,14 @@ export async function runsByItself(command: string): Promise<boolean> {
   }
 }
 
+/**
+ * Tells the session of `tab` the space it is in, `null` for none: the
+ * history records it with each command that ends.
+ */
+export function setTabSpace(tab: Tab, space: number | null): void {
+  if (tab.id >= 0) void invoke("session_set_space", { id: tab.id, space });
+}
+
 /** Closes the session and removes everything `openTab` created. */
 export function closeTab(tab: Tab): void {
   tab.abort.abort();

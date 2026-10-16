@@ -12,6 +12,8 @@ pub enum Error {
     Config(String),
     /// The state file is not one the app wrote; the message says why.
     State(String),
+    /// The history database could not be opened, read or written.
+    History(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -23,6 +25,7 @@ impl fmt::Display for Error {
             Error::Io(e) => write!(f, "io: {e}"),
             Error::Config(s) => write!(f, "config: {s}"),
             Error::State(s) => write!(f, "state: {s}"),
+            Error::History(s) => write!(f, "history: {s}"),
         }
     }
 }
@@ -32,7 +35,7 @@ impl std::error::Error for Error {
         match self {
             Error::Pty(e) => Some(e.as_ref()),
             Error::Io(e) => Some(e),
-            Error::Config(_) | Error::State(_) => None,
+            Error::Config(_) | Error::State(_) | Error::History(_) => None,
         }
     }
 }
@@ -40,6 +43,12 @@ impl std::error::Error for Error {
 impl From<anyhow::Error> for Error {
     fn from(e: anyhow::Error) -> Self {
         Error::Pty(e)
+    }
+}
+
+impl From<rusqlite::Error> for Error {
+    fn from(e: rusqlite::Error) -> Self {
+        Error::History(e.to_string())
     }
 }
 

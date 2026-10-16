@@ -3,7 +3,7 @@
 #
 #   mkdir -p .dev && cp dev/config.example.toml .dev/config.toml
 #
-# Debug builds keep everything in `.dev/` (config, state), out of git, and
+# Debug builds keep everything in `.dev/` (config, state, history), out of git, and
 # never touch the files of the installed app. Without `.dev/config.toml`
 # they start with the defaults below.
 #
@@ -38,3 +38,15 @@
 # run = "ask"
 # Globs on the whole command: `*` is any text, `?` any one character.
 # match = ["npm run *", "cargo watch *"]
+
+[history]
+# Every command that ends is kept, with its folder, space, branch and status,
+# for the palette to search. The history of the shell is not touched.
+# enabled = true
+# max_entries = 50000                     # the oldest go first
+# max_age = "1y"                          # also let go what is older: 30d, 12w, 6m, 1y
+# secrets_filter = true                   # known keys and tokens: not kept
+# Regexes: commands not kept.
+# exclude = ["^export .*="]
+# Folders, `~` for the home, `*` for any text: nothing run in there is kept.
+# exclude_folders = ["~/clients/secret"]

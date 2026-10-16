@@ -287,3 +287,66 @@ fn a_command_after_a_space_has_no_text() {
         ]
     );
 }
+
+// Every command that ends, through a real zsh and the session, is an entry
+// of the history, with its folder and status; one typed after a space is not.
+#[test]
+fn commands_end_up_in_the_history() {
+    use std::sync::{Arc, Mutex};
+    use ttylde_core::{
+        config::HistoryConfig,
+        history::{Filter, History, Limits, Query, Recorder},
+    };
+
+    if !Path::new(ZSH).exists() {
+        return;
+    }
+    let home = home("zsh-history", &[(".zshrc", "PS1='%# '\n")]);
+    let config = HistoryConfig::default();
+    let history = Arc::new(Mutex::new(
+        History::open(
+            &home.join("history.db"),
+            Filter::new(&config, None),
+            Limits::from(&config),
+        )
+        .unwrap(),
+    ));
+    let recorder = Arc::new(Mutex::new(Recorder::default()));
+    recorder.lock().unwrap().set_space(Some(7));
+
+    let mut cmd = CommandBuilder::new(ZSH);
+    cmd.arg("-l");
+    cmd.cwd(&home);
+    cmd.env("HOME", &home);
+    cmd.env("TERM", "xterm-256color");
+    cmd.env_remove("ZDOTDIR");
+    shell::integrate(&mut cmd, Path::new(ZSH), &scripts(), &shell::nonce());
+    let (tx, rx) = mpsc::channel();
+    let (store, recording) = (Arc::clone(&history), Arc::clone(&recorder));
+    let on_event: EventHandler = Box::new(move |event| {
+        if let Some(record) = recording.lock().unwrap().observe(&event, 1) {
+            store.lock().unwrap().record(&record).unwrap();
+        }
+        let _ = tx.send(event);
+    });
+    let mut session = Session::spawn(cmd, 80, 24, Theme::default(), 100, on_event).unwrap();
+
+    for line in ["echo one", " echo secret", "false"] {
+        commands_until(&rx, |e| *e == SessionEvent::Prompt);
+        session.write(format!("{line}\r").as_bytes()).unwrap();
+        commands_until(&rx, |e| matches!(e, SessionEvent::CommandEnd(_)));
+    }
+
+    let query = Query {
+        limit: 10,
+        ..Query::default()
+    };
+    let entries = history.lock().unwrap().search(&query).unwrap();
+    let seen: Vec<(&str, Option<i32>)> = entries
+        .iter()
+        .map(|e| (e.command.as_str(), e.exit))
+        .collect();
+    assert_eq!(seen, [("false", Some(1)), ("echo one", Some(0))]);
+    assert_eq!(entries[0].space, Some(7));
+    assert_eq!(entries[0].cwd.as_deref(), home.to_str());
+}

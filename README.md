@@ -58,9 +58,19 @@ selection = "#3a3f58"
 # what matches a pattern below and asks for the rest.
 run = "matching"
 match = ["npm run *", "cargo watch *"]  # globs on the whole command
+
+[history]
+# Every command that ends is kept, with its folder, space, branch and status,
+# for the palette to search. The history of your shell is not touched.
+enabled = true
+max_entries = 50000                       # the oldest go first
+# max_age = "1y"                          # also let go what is older: 30d, 12w, 6m, 1y
+secrets_filter = true                     # known keys and tokens: not kept
+exclude = ["^export .*="]                 # regexes: commands not kept
+exclude_folders = ["~/clients/secret"]    # nothing run in there, or under it, is kept
 ```
 
-A command typed with a space in front is never kept, as with `HIST_IGNORE_SPACE`. Nothing the output of a program prints can pass for a command: the shell signs what it sends with a secret Ttylde gives it.
+A command typed with a space in front is never kept, as with `HIST_IGNORE_SPACE`. The history is a SQLite file next to the state, `~/.local/state/ttylde/history.db`, that only you can read. Nothing the output of a program prints can pass for a command: the shell signs what it sends with a secret Ttylde gives it.
 
 The app opens on the launcher: the space you were in, ready to resume with `Enter`, the other closed spaces, and a prompt where typing a command starts a new session. Closing the last open space brings it back. Tabs opened while no space is open belong to none, as in a plain terminal, and are not kept across restarts; opening a space asks whether they come along, and **Move to space…** in the menu of a tab moves it, session alive.
 
@@ -76,7 +86,7 @@ pnpm install
 pnpm tauri dev
 ```
 
-A debug build keeps its config and its state in `.dev/` at the root of the repository, out of git, and never touches the files of the installed app: `rm -rf .dev` starts over. It starts with the default config; to change it:
+A debug build keeps its config, its state and its history in `.dev/` at the root of the repository, out of git, and never touches the files of the installed app: `rm -rf .dev` starts over. It starts with the default config; to change it:
 
 ```sh
 mkdir -p .dev && cp dev/config.example.toml .dev/config.toml
