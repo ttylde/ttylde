@@ -22,10 +22,14 @@ export const ACTIVE_AFTER = 5 * 60_000;
  * How long a command runs before its dot shows: `ls` and the like end
  * before, and a dot that flashes at every command would only be noise.
  */
-export const SHOWN_AFTER = 1000;
+export const SHOWN_AFTER = 300;
 
-/** The exit status of a command stopped with `Ctrl+C`: not an error. */
-const INTERRUPTED = 130;
+/**
+ * Exit statuses that are not errors: `Ctrl+C` (130, SIGINT), and a reader
+ * that stopped reading (141, SIGPIPE), as when `q` closes the pager of
+ * `git log` before it has written everything, or `| head` has enough.
+ */
+const NOT_FAILURES = [130, 141];
 
 export const READY: TabStatus = { status: "ready", since: 0 };
 
@@ -37,7 +41,8 @@ export function started(current: TabStatus, now: number): TabStatus {
 
 /**
  * The command ended with `exit`. `null`: the shell did not say, as when a
- * prompt comes back without an end; that counts as done, as `Ctrl+C` does.
+ * prompt comes back without an end; that counts as done, as `Ctrl+C` and
+ * a closed pipe do.
  *
  * Done is for a tab the user was not looking at: "I am finished". In the
  * tab they look at, the output says it already, and the dot goes away.
@@ -50,7 +55,7 @@ export function ended(
   seen: boolean,
 ): TabStatus {
   if (!isRunning(current)) return current;
-  const failed = exit !== null && exit !== 0 && exit !== INTERRUPTED;
+  const failed = exit !== null && exit !== 0 && !NOT_FAILURES.includes(exit);
   if (failed) return { status: "error", since: now };
   return seen ? READY : { status: "done", since: now };
 }

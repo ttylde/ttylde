@@ -44,7 +44,6 @@ type Entry = {
   row: HTMLElement;
   icon: HTMLElement;
   label: HTMLElement;
-  branch: HTMLElement;
   /** The state of the tab, as a dot: see `status.ts`. */
   dot: HTMLElement;
 };
@@ -325,8 +324,6 @@ export class Tabs {
     icon.className = "tab-icon";
     const label = document.createElement("span");
     label.className = "tab-title";
-    const branch = document.createElement("span");
-    branch.className = "tab-branch";
     const dot = document.createElement("span");
     dot.className = "status-dot tab-status";
     const actions = document.createElement("span");
@@ -340,7 +337,7 @@ export class Tabs {
     close.title = "Close tab";
     close.textContent = "×";
     actions.append(more, close);
-    row.append(mark, icon, label, branch, dot, actions);
+    row.append(mark, icon, label, dot, actions);
     (place === PINNED ? pinned : list).appendChild(row);
 
     row.addEventListener("click", () => this.activate(tab));
@@ -357,7 +354,7 @@ export class Tabs {
       this.close(tab);
     });
 
-    const entry: Entry = { tab, space: place, row, icon, label, branch, dot };
+    const entry: Entry = { tab, space: place, row, icon, label, dot };
     this.entries.push(entry);
     this.paintStatus(entry);
     this.retitle(tab);
@@ -764,8 +761,6 @@ export class Tabs {
     entry.icon.innerHTML = iconMarkup(tab.look.icon);
     entry.row.style.setProperty("--tab-color", tab.look.color);
     entry.label.textContent = title;
-    entry.branch.textContent = tab.git?.branch ?? "";
-    entry.branch.classList.toggle("dirty", tab.git?.dirty ?? false);
     // One hover away: what the program says of itself, and the whole path.
     const branch = tab.git && `${tab.git.branch}${tab.git.dirty ? " (changes to commit)" : ""}`;
     entry.row.title = [title, tab.title, tab.cwd, branch]

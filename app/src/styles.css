@@ -324,26 +324,6 @@ body {
   font-family: var(--mono);
 }
 
-/* The branch of the folder, and a dot when it has changes to commit. */
-.tab-branch {
-  flex: none;
-  max-width: 45%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--muted);
-  font: 10.5px var(--mono);
-}
-
-.tab-branch:empty {
-  display: none;
-}
-
-.tab-branch.dirty::after {
-  content: " ●";
-  color: var(--warning);
-}
-
 /* The state of a tab: running pulses, the others are steady; at the prompt
    there is no dot. */
 .status-dot {
@@ -1048,7 +1028,6 @@ body.collapsed #section,
 body.collapsed #pinned-group .section,
 body.collapsed .tab-mark,
 body.collapsed .tab-title,
-body.collapsed .tab-branch,
 body.collapsed .tab .tab-actions,
 body.collapsed #new-tab .text,
 body.collapsed #new-tab .hint {

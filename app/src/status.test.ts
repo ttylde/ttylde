@@ -27,6 +27,12 @@ group("status", () => {
     expect(ended(running, 2, 10, true).status).toBe("error");
   });
 
+  // `q` in the pager of a long `git log`: git dies of SIGPIPE.
+  test("a closed pipe is not an error", () => {
+    expect(ended(started(READY, 0), 141, 10, false).status).toBe("done");
+    expect(ended(started(READY, 0), 143, 10, false).status).toBe("error");
+  });
+
   test("Ctrl+C is not an error", () => {
     expect(ended(started(READY, 0), 130, 10, false).status).toBe("done");
     expect(ended(started(READY, 0), 130, 10, true)).toBe(READY);
