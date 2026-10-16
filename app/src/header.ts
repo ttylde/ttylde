@@ -1,7 +1,7 @@
 import { BRANCH_ICON, FOLDER_ICON } from "./icons";
 import { folderName } from "./label";
 import type { Space } from "./space";
-import { describe, type TabStatus } from "./status";
+import { describe, shown, type TabStatus } from "./status";
 import type { GitStatus } from "./types";
 
 /** What the header says of the visible tab. */
@@ -109,7 +109,7 @@ export class Header {
     this.spaceButton.title = space ? "Switch space (⌃1…9)" : "";
 
     this.tab.textContent = view.title;
-    this.dot.dataset.status = view.status.status;
+    this.dot.dataset.status = shown(view.status, Date.now());
     this.dot.title = describe(view.status, Date.now());
 
     this.cwd = view.cwd;

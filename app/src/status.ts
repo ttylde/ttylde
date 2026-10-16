@@ -18,8 +18,14 @@ export type TabStatus = {
  */
 export const ACTIVE_AFTER = 5 * 60_000;
 
-/** How long `done` stays once its tab is the one shown. */
-export const DONE_FOR = 2500;
+/**
+ * How long a command runs before its dot shows: `ls` and the like end
+ * before, and a dot that flashes at every command would only be noise.
+ */
+export const SHOWN_AFTER = 1000;
+
+/** The exit status of a command stopped with `Ctrl+C`: not an error. */
+const INTERRUPTED = 130;
 
 export const READY: TabStatus = { status: "ready", since: 0 };
 
@@ -31,11 +37,36 @@ export function started(current: TabStatus, now: number): TabStatus {
 
 /**
  * The command ended with `exit`. `null`: the shell did not say, as when a
- * prompt comes back without an end; that counts as done.
+ * prompt comes back without an end; that counts as done, as `Ctrl+C` does.
+ *
+ * Done is for a tab the user was not looking at: "I am finished". In the
+ * tab they look at, the output says it already, and the dot goes away.
+ * An error shows wherever it happens.
  */
-export function ended(current: TabStatus, exit: number | null, now: number): TabStatus {
+export function ended(
+  current: TabStatus,
+  exit: number | null,
+  now: number,
+  seen: boolean,
+): TabStatus {
   if (!isRunning(current)) return current;
-  return { status: exit === null || exit === 0 ? "done" : "error", since: now };
+  const failed = exit !== null && exit !== 0 && exit !== INTERRUPTED;
+  if (failed) return { status: "error", since: now };
+  return seen ? READY : { status: "done", since: now };
+}
+
+/** The user looks at the tab: done has been seen, and goes away. */
+export function seen(current: TabStatus): TabStatus {
+  return current.status === "done" ? READY : current;
+}
+
+/**
+ * The state the dot shows: a command that started a moment ago has none
+ * yet, see `SHOWN_AFTER`.
+ */
+export function shown(current: TabStatus, now: number): Status {
+  if (current.status === "running" && now - current.since < SHOWN_AFTER) return "ready";
+  return current.status;
 }
 
 /** A command still running after `ACTIVE_AFTER` is active. */
@@ -49,8 +80,9 @@ export function isRunning({ status }: TabStatus): boolean {
 }
 
 /** What the dot says when the pointer is on it; empty when there is no dot. */
-export function describe({ status, since }: TabStatus, now: number): string {
-  switch (status) {
+export function describe(current: TabStatus, now: number): string {
+  const { since } = current;
+  switch (shown(current, now)) {
     case "ready":
       return "";
     case "running":

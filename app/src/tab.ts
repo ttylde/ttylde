@@ -56,6 +56,8 @@ export type TabHandlers = {
   onTitle(tab: Tab): void;
   /** A command started or ended, or the shell shows a prompt. */
   onCommand(tab: Tab): void;
+  /** Whether the user is looking at the tab: shown, in a window in front. */
+  isSeen(tab: Tab): boolean;
   onBackground(tab: Tab): void;
   onExit(tab: Tab): void;
 };
@@ -145,7 +147,7 @@ export async function openTab(
         break;
       case "CommandEnd":
         tab.restart = null;
-        tab.status = ended(tab.status, event.data, Date.now());
+        tab.status = ended(tab.status, event.data, Date.now(), handlers.isSeen(tab));
         handlers.onCommand(tab);
         break;
       case "Bell":

@@ -6,7 +6,7 @@ import { closeMenu, openMenu } from "./menu";
 import { openRename } from "./rename";
 import { dropIndex, makeRoom } from "./reorder";
 import { createSpace, type Space, type SpaceChanges, stepIndex } from "./space";
-import { ACTIVE_AFTER, aged, DONE_FOR, describe, READY } from "./status";
+import { ACTIVE_AFTER, aged, describe, SHOWN_AFTER, seen, shown } from "./status";
 import {
   closeTab,
   defaultTitle,
@@ -145,8 +145,8 @@ export class Tabs {
   private inMenu: Tab | null = null;
   // Tabs whose command starts again by itself at the first prompt.
   private waiting = new Map<Tab, string>();
-  // The one timer of each tab with a state that changes by itself: running
-  // becoming active, done going back to ready.
+  // The one timer of each tab with a state that changes by itself: a
+  // running command whose dot shows, then becomes active.
   private statusTimers = new Map<Tab, number>();
   constructor(private options: TabsOptions) {
     window.setInterval(() => {
@@ -285,6 +285,7 @@ export class Tabs {
     const handlers: TabHandlers = {
       onTitle: (tab) => this.retitle(tab),
       onCommand: (tab) => this.commandChanged(tab),
+      isSeen: (tab) => tab === this.active && this.focused,
       onBackground: (tab) => {
         if (tab === this.active) this.options.onActiveChange(tab);
       },
@@ -422,31 +423,35 @@ export class Tabs {
     this.changed();
   }
 
-  // Sets the timer of the state that changes by itself: a running command
-  // becomes active after a while; done goes back to ready a moment after
-  // its tab is the one shown, and stays until then.
+  // Sets the timer of a running command: its dot shows after a moment, and
+  // it becomes active after a while.
   private scheduleStatus(tab: Tab): void {
     window.clearTimeout(this.statusTimers.get(tab));
     this.statusTimers.delete(tab);
     const { status, since } = tab.status;
-    let wait: number | null = null;
-    if (status === "running") wait = since + ACTIVE_AFTER - Date.now();
-    if (status === "done" && tab === this.active) wait = DONE_FOR;
-    if (wait === null) return;
+    if (status !== "running") return;
+    const now = Date.now();
+    const at = now < since + SHOWN_AFTER ? since + SHOWN_AFTER : since + ACTIVE_AFTER;
 
-    const timer = window.setTimeout(
-      () => {
-        this.statusTimers.delete(tab);
-        tab.status = status === "done" ? READY : aged(tab.status, Date.now());
-        this.commandChanged(tab);
-      },
-      Math.max(0, wait),
-    );
+    const timer = window.setTimeout(() => {
+      this.statusTimers.delete(tab);
+      tab.status = aged(tab.status, Date.now());
+      this.commandChanged(tab);
+    }, at - now);
     this.statusTimers.set(tab, timer);
   }
 
+  // The user looks at `tab`: a command it finished meanwhile has been seen.
+  private look(tab: Tab): void {
+    const before = tab.status;
+    tab.status = seen(before);
+    if (tab.status === before) return;
+    const entry = this.entries.find((e) => e.tab === tab);
+    if (entry) this.paintStatus(entry);
+  }
+
   private paintStatus({ tab, dot }: Entry): void {
-    dot.dataset.status = tab.status.status;
+    dot.dataset.status = shown(tab.status, Date.now());
     dot.title = describe(tab.status, Date.now());
   }
 
@@ -565,7 +570,12 @@ export class Tabs {
   /** The window gained or lost the focus. */
   setFocused(focused: boolean): void {
     this.focused = focused;
-    if (this.active) focusTab(this.active, focused);
+    if (!this.active) return;
+    focusTab(this.active, focused);
+    if (focused) {
+      this.look(this.active);
+      this.options.onActiveChange(this.active);
+    }
   }
 
   /** Refits every tab to the terminal area, hidden ones included. */
@@ -742,8 +752,7 @@ export class Tabs {
       entry.row.classList.toggle("active", isActive);
       if (isActive) this.lastTab.set(entry.space, tab);
     }
-    // Done is seen now: in a moment it goes back to ready.
-    if (tab.status.status === "done") this.scheduleStatus(tab);
+    if (this.focused) this.look(tab);
     this.options.onActiveChange(tab);
     this.changed();
   }
