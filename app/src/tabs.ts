@@ -6,6 +6,7 @@ import { closeMenu, openMenu } from "./menu";
 import { openRename } from "./rename";
 import { dropIndex, makeRoom } from "./reorder";
 import { createSpace, type Space, type SpaceChanges, stepIndex } from "./space";
+import { ACTIVE_AFTER, aged, describe, SHOWN_AFTER, seen, shown } from "./status";
 import {
   closeTab,
   defaultTitle,
@@ -43,8 +44,12 @@ type Entry = {
   row: HTMLElement;
   icon: HTMLElement;
   label: HTMLElement;
-  branch: HTMLElement;
+  /** The state of the tab, as a dot: see `status.ts`. */
+  dot: HTMLElement;
 };
+
+/** How often the time in the tooltips of the dots is brought up to date. */
+const TOOLTIP_EVERY = 30_000;
 
 /**
  * What is kept of a tab that closes: what it looked like, the folder it was
@@ -139,7 +144,15 @@ export class Tabs {
   private inMenu: Tab | null = null;
   // Tabs whose command starts again by itself at the first prompt.
   private waiting = new Map<Tab, string>();
-  constructor(private options: TabsOptions) {}
+  // The one timer of each tab with a state that changes by itself: a
+  // running command whose dot shows, then becomes active.
+  private statusTimers = new Map<Tab, number>();
+  constructor(private options: TabsOptions) {
+    window.setInterval(() => {
+      for (const entry of this.entries) this.paintStatus(entry);
+      if (this.active) this.options.onActiveChange(this.active);
+    }, TOOLTIP_EVERY);
+  }
 
   /** Session id of the visible tab, the one the keyboard writes to. */
   activeId(): number | null {
@@ -271,6 +284,7 @@ export class Tabs {
     const handlers: TabHandlers = {
       onTitle: (tab) => this.retitle(tab),
       onCommand: (tab) => this.commandChanged(tab),
+      isSeen: (tab) => tab === this.active && this.focused,
       onBackground: (tab) => {
         if (tab === this.active) this.options.onActiveChange(tab);
       },
@@ -310,8 +324,8 @@ export class Tabs {
     icon.className = "tab-icon";
     const label = document.createElement("span");
     label.className = "tab-title";
-    const branch = document.createElement("span");
-    branch.className = "tab-branch";
+    const dot = document.createElement("span");
+    dot.className = "status-dot tab-status";
     const actions = document.createElement("span");
     actions.className = "tab-actions";
     const more = document.createElement("button");
@@ -323,7 +337,7 @@ export class Tabs {
     close.title = "Close tab";
     close.textContent = "×";
     actions.append(more, close);
-    row.append(mark, icon, label, branch, actions);
+    row.append(mark, icon, label, dot, actions);
     (place === PINNED ? pinned : list).appendChild(row);
 
     row.addEventListener("click", () => this.activate(tab));
@@ -340,7 +354,9 @@ export class Tabs {
       this.close(tab);
     });
 
-    this.entries.push({ tab, space: place, row, icon, label, branch });
+    const entry: Entry = { tab, space: place, row, icon, label, dot };
+    this.entries.push(entry);
+    this.paintStatus(entry);
     this.retitle(tab);
     if (place === this.space) {
       if (!from || !this.lastTab.has(place)) this.activate(tab);
@@ -397,8 +413,43 @@ export class Tabs {
   // A command of `tab` started or ended, or the shell is ready.
   private commandChanged(tab: Tab): void {
     if (tab.ready) this.runWaiting(tab);
+    this.scheduleStatus(tab);
+    const entry = this.entries.find((e) => e.tab === tab);
+    if (entry) this.paintStatus(entry);
     if (tab === this.active) this.options.onActiveChange(tab);
     this.changed();
+  }
+
+  // Sets the timer of a running command: its dot shows after a moment, and
+  // it becomes active after a while.
+  private scheduleStatus(tab: Tab): void {
+    window.clearTimeout(this.statusTimers.get(tab));
+    this.statusTimers.delete(tab);
+    const { status, since } = tab.status;
+    if (status !== "running") return;
+    const now = Date.now();
+    const at = now < since + SHOWN_AFTER ? since + SHOWN_AFTER : since + ACTIVE_AFTER;
+
+    const timer = window.setTimeout(() => {
+      this.statusTimers.delete(tab);
+      tab.status = aged(tab.status, Date.now());
+      this.commandChanged(tab);
+    }, at - now);
+    this.statusTimers.set(tab, timer);
+  }
+
+  // The user looks at `tab`: a command it finished meanwhile has been seen.
+  private look(tab: Tab): void {
+    const before = tab.status;
+    tab.status = seen(before);
+    if (tab.status === before) return;
+    const entry = this.entries.find((e) => e.tab === tab);
+    if (entry) this.paintStatus(entry);
+  }
+
+  private paintStatus({ tab, dot }: Entry): void {
+    dot.dataset.status = shown(tab.status, Date.now());
+    dot.title = describe(tab.status, Date.now());
   }
 
   /**
@@ -516,7 +567,12 @@ export class Tabs {
   /** The window gained or lost the focus. */
   setFocused(focused: boolean): void {
     this.focused = focused;
-    if (this.active) focusTab(this.active, focused);
+    if (!this.active) return;
+    focusTab(this.active, focused);
+    if (focused) {
+      this.look(this.active);
+      this.options.onActiveChange(this.active);
+    }
   }
 
   /** Refits every tab to the terminal area, hidden ones included. */
@@ -693,6 +749,7 @@ export class Tabs {
       entry.row.classList.toggle("active", isActive);
       if (isActive) this.lastTab.set(entry.space, tab);
     }
+    if (this.focused) this.look(tab);
     this.options.onActiveChange(tab);
     this.changed();
   }
@@ -704,8 +761,6 @@ export class Tabs {
     entry.icon.innerHTML = iconMarkup(tab.look.icon);
     entry.row.style.setProperty("--tab-color", tab.look.color);
     entry.label.textContent = title;
-    entry.branch.textContent = tab.git?.branch ?? "";
-    entry.branch.classList.toggle("dirty", tab.git?.dirty ?? false);
     // One hover away: what the program says of itself, and the whole path.
     const branch = tab.git && `${tab.git.branch}${tab.git.dirty ? " (changes to commit)" : ""}`;
     entry.row.title = [title, tab.title, tab.cwd, branch]
@@ -952,6 +1007,8 @@ export class Tabs {
     if (tab === this.inMenu) closeMenu();
     this.entries.splice(this.entries.indexOf(entry), 1);
     this.waiting.delete(tab);
+    window.clearTimeout(this.statusTimers.get(tab));
+    this.statusTimers.delete(tab);
     entry.row.remove();
     closeTab(tab);
     this.changed();

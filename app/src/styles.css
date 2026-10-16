@@ -324,24 +324,50 @@ body {
   font-family: var(--mono);
 }
 
-/* The branch of the folder, and a dot when it has changes to commit. */
-.tab-branch {
+/* The state of a tab: running pulses, the others are steady; at the prompt
+   there is no dot. */
+.status-dot {
   flex: none;
-  max-width: 45%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--muted);
-  font: 10.5px var(--mono);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
-.tab-branch:empty {
+.status-dot[data-status="ready"] {
   display: none;
 }
 
-.tab-branch.dirty::after {
-  content: " ●";
-  color: var(--warning);
+.status-dot[data-status="running"] {
+  background: #8a7d12;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.status-dot[data-status="active"] {
+  background: #1f52d6;
+}
+
+.status-dot[data-status="done"] {
+  background: #1f9a6a;
+}
+
+.status-dot[data-status="error"] {
+  background: var(--danger);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* The actions take its place under the pointer. */
+.tab:hover .tab-status,
+.tab.in-menu .tab-status {
+  visibility: hidden;
 }
 
 /* More and close, shown while the pointer is on the row or its menu is open. */
@@ -524,6 +550,12 @@ body.collapsed .header-space.open {
   text-overflow: ellipsis;
 }
 
+.header-status {
+  width: 7px;
+  height: 7px;
+  margin-left: 8px;
+}
+
 .header-rule {
   flex: none;
   width: 1px;
@@ -575,12 +607,16 @@ body.collapsed .header-space.open {
   color: var(--ink);
 }
 
-.header-branch-mark {
-  color: #1f9a6a;
+/* Larger and bolder than the branch: an asterisk is small. In the colour
+   of the text: the colours of the header are for the states of the tab. */
+.header-changes {
+  margin-left: -3px;
+  color: var(--ink);
+  font: 700 14px / 1 var(--mono);
 }
 
-.header-branch-mark.dirty {
-  color: #8a7d12;
+.header-changes:empty {
+  display: none;
 }
 
 /* The terminal is a panel laid on the window. Its color is the background
@@ -966,6 +1002,24 @@ body.collapsed #new-tab .plus {
   padding: 0;
 }
 
+/* In the rail the dot sits on the corner of the icon. */
+body.collapsed .tab {
+  position: relative;
+}
+
+body.collapsed .tab .tab-status {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+}
+
+body.collapsed .tab:hover .tab-status,
+body.collapsed .tab.in-menu .tab-status {
+  visibility: visible;
+}
+
 /* In the rail a tab is its icon alone, a little larger. */
 body.collapsed .tab-icon,
 body.collapsed .tab-icon .line-icon {
@@ -978,7 +1032,6 @@ body.collapsed #section,
 body.collapsed #pinned-group .section,
 body.collapsed .tab-mark,
 body.collapsed .tab-title,
-body.collapsed .tab-branch,
 body.collapsed .tab .tab-actions,
 body.collapsed #new-tab .text,
 body.collapsed #new-tab .hint {

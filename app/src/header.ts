@@ -1,6 +1,7 @@
 import { BRANCH_ICON, FOLDER_ICON } from "./icons";
 import { folderName } from "./label";
 import type { Space } from "./space";
+import { describe, shown, type TabStatus } from "./status";
 import type { GitStatus } from "./types";
 
 /** What the header says of the visible tab. */
@@ -12,6 +13,7 @@ export type HeaderView = {
   git: GitStatus | null;
   /** The folder it works in, `null` until the core tells. */
   cwd: string | null;
+  status: TabStatus;
 };
 
 export type HeaderOptions = {
@@ -34,11 +36,12 @@ export class Header {
   private readonly spaceDot: HTMLElement;
   private readonly spaceName: HTMLElement;
   private readonly tab: HTMLElement;
+  private readonly dot: HTMLElement;
   private readonly folder: HTMLElement;
   private readonly folderName: HTMLElement;
   private readonly branch: HTMLElement;
   private readonly branchName: HTMLElement;
-  private readonly branchMark: HTMLElement;
+  private readonly changes: HTMLElement;
   // The whole path of the folder, which a click copies.
   private cwd: string | null = null;
 
@@ -55,6 +58,7 @@ export class Header {
     this.spaceButton.append(this.spaceDot, this.spaceName, chevron);
 
     this.tab = span("header-tab");
+    this.dot = span("status-dot header-status");
 
     this.folder = span("header-chip header-folder");
     this.folderName = span("header-chip-text");
@@ -62,8 +66,8 @@ export class Header {
 
     this.branch = span("header-chip header-branch");
     this.branchName = span("header-chip-text");
-    this.branchMark = span("header-branch-mark");
-    this.branch.append(icon(BRANCH_ICON), this.branchName, this.branchMark);
+    this.changes = span("header-changes");
+    this.branch.append(icon(BRANCH_ICON), this.branchName, this.changes);
 
     const where = span("header-where");
     where.append(this.folder, this.branch);
@@ -71,6 +75,7 @@ export class Header {
       this.spaceButton,
       span("header-separator", "›"),
       this.tab,
+      this.dot,
       span("header-rule"),
       where,
     );
@@ -104,6 +109,8 @@ export class Header {
     this.spaceButton.title = space ? "Switch space (⌃1…9)" : "";
 
     this.tab.textContent = view.title;
+    this.dot.dataset.status = shown(view.status, Date.now());
+    this.dot.title = describe(view.status, Date.now());
 
     this.cwd = view.cwd;
     this.folder.hidden = view.cwd === null;
@@ -116,8 +123,9 @@ export class Header {
     if (view.git) {
       const { branch, dirty } = view.git;
       this.branchName.textContent = branch;
-      this.branchMark.textContent = dirty ? "●" : "✓";
-      this.branchMark.classList.toggle("dirty", dirty);
+      // `main*`: changes to commit, as prompts and editors write it.
+      // `main*`: changes to commit, as prompts and editors write it.
+      this.changes.textContent = dirty ? "*" : "";
       this.branch.title = `${branch}: ${dirty ? "changes to commit" : "nothing to commit"}`;
     }
   }

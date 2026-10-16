@@ -104,6 +104,7 @@ function showHeader(): void {
       title: titleOf(shown),
       git: shown.git,
       cwd: shown.cwd,
+      status: shown.status,
     },
   );
 }
