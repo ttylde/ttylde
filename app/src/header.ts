@@ -1,4 +1,5 @@
-import { tildePath } from "./label";
+import { BRANCH_ICON, FOLDER_ICON } from "./icons";
+import { folderName } from "./label";
 import type { Space } from "./space";
 import type { GitStatus } from "./types";
 
@@ -15,16 +16,14 @@ export type HeaderView = {
 
 export type HeaderOptions = {
   root: HTMLElement;
-  /** The user's home, written `~` in the folder; `null` if not known. */
-  home: string | null;
   /** The space is clicked with the sidebar collapsed: its menu opens. */
   onSpaceMenu(anchor: HTMLElement): void;
 };
 
 /**
- * The line above the terminal: the space of the visible tab, the tab, the
- * branch of its folder, the folder. The right end is kept for what comes
- * next (favorites, split buttons, status).
+ * The line above the terminal: the space of the visible tab, the tab, then
+ * the folder it works in and the branch of that folder. The right end is
+ * kept for what comes next (favorites, split buttons).
  *
  * With the sidebar collapsed the rail has no space name: the one here is
  * the button that opens the space menu.
@@ -34,10 +33,13 @@ export class Header {
   private readonly spaceDot: HTMLElement;
   private readonly spaceName: HTMLElement;
   private readonly tab: HTMLElement;
+  private readonly folder: HTMLElement;
+  private readonly folderName: HTMLElement;
   private readonly branch: HTMLElement;
   private readonly branchName: HTMLElement;
   private readonly branchMark: HTMLElement;
-  private readonly folder: HTMLElement;
+  // The whole path of the folder, which a click copies.
+  private cwd: string | null = null;
 
   constructor(private options: HeaderOptions) {
     const { root } = options;
@@ -46,33 +48,35 @@ export class Header {
     this.space.className = "header-space";
     this.spaceDot = span("header-dot");
     this.spaceName = span("header-space-name");
-    const chevron = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    chevron.setAttribute("class", "header-chevron");
-    chevron.setAttribute("viewBox", "0 0 10 6");
-    chevron.setAttribute("width", "10");
-    chevron.setAttribute("height", "6");
+    const chevron = span("header-chevron");
     chevron.innerHTML =
-      '<path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" />';
+      '<svg viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>';
     this.space.append(this.spaceDot, this.spaceName, chevron);
 
-    const separator = span("header-separator", "›");
     this.tab = span("header-tab");
 
-    this.branch = span("header-branch");
-    const line = span("header-branch-line");
-    const text = span("header-branch-text");
-    this.branchName = span("header-branch-name");
-    this.branchMark = span("header-branch-mark");
-    text.append(span("header-branch-glyph", "⎇"), this.branchName, this.branchMark);
-    this.branch.append(text, line);
+    this.folder = span("header-chip header-folder");
+    this.folderName = span("header-chip-text");
+    this.folder.append(icon(FOLDER_ICON), this.folderName);
 
-    this.folder = span("header-folder");
-    root.append(this.space, separator, this.tab, this.branch, this.folder);
+    this.branch = span("header-chip header-branch");
+    this.branchName = span("header-chip-text");
+    this.branchMark = span("header-branch-mark");
+    this.branch.append(icon(BRANCH_ICON), this.branchName, this.branchMark);
+
+    const where = span("header-where");
+    where.append(this.folder, this.branch);
+    root.append(this.space, span("header-separator", "›"), this.tab, span("header-rule"), where);
 
     // The keyboard stays in the terminal.
-    this.space.addEventListener("mousedown", (e) => e.preventDefault());
+    for (const button of [this.space, this.folder]) {
+      button.addEventListener("mousedown", (e) => e.preventDefault());
+    }
     this.space.addEventListener("click", () => {
       if (document.body.classList.contains("collapsed")) options.onSpaceMenu(this.space);
+    });
+    this.folder.addEventListener("click", () => {
+      if (this.cwd !== null) copy(this.cwd);
     });
   }
 
@@ -81,8 +85,7 @@ export class Header {
    * its place either way, so that the terminal under it keeps its size.
    */
   show(view: HeaderView | null): void {
-    const { root, home } = this.options;
-    root.classList.toggle("empty", view === null);
+    this.options.root.classList.toggle("empty", view === null);
     if (!view) return;
 
     const { place } = view;
@@ -91,9 +94,16 @@ export class Header {
     // The color is one of the palette, never text typed by someone.
     this.spaceDot.style.background = space?.color ?? "";
     this.space.classList.toggle("none", space === null);
-    this.space.title = space?.name ?? "";
+    this.space.title = space ? "Switch space (⌃1…9)" : "";
 
     this.tab.textContent = view.title;
+
+    this.cwd = view.cwd;
+    this.folder.hidden = view.cwd === null;
+    if (view.cwd !== null) {
+      this.folderName.textContent = folderName(view.cwd);
+      this.folder.title = `${view.cwd} · click to copy the path`;
+    }
 
     this.branch.hidden = view.git === null;
     if (view.git) {
@@ -102,12 +112,6 @@ export class Header {
       this.branchMark.textContent = dirty ? "●" : "✓";
       this.branchMark.classList.toggle("dirty", dirty);
       this.branch.title = `${branch}: ${dirty ? "changes to commit" : "nothing to commit"}`;
-    }
-
-    this.folder.hidden = view.cwd === null;
-    if (view.cwd !== null) {
-      this.folder.textContent = tildePath(view.cwd, home);
-      this.folder.title = view.cwd;
     }
   }
 
@@ -122,4 +126,17 @@ function span(className: string, text = ""): HTMLElement {
   element.className = className;
   element.textContent = text;
   return element;
+}
+
+function icon(markup: string): HTMLElement {
+  const element = span("header-icon");
+  element.innerHTML = markup;
+  return element;
+}
+
+// Puts `text` on the clipboard. A click is enough for the webview to allow it.
+function copy(text: string): void {
+  navigator.clipboard.writeText(text).catch((error) => {
+    console.error("ttylde: cannot copy the path", error);
+  });
 }

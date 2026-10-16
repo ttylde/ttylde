@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { homeDir } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { isFormOpen } from "./form";
@@ -65,8 +64,6 @@ try {
 }
 
 const font = await invoke<Font>("config_font");
-// The folder in the header writes the home `~`.
-const home = await homeDir().catch(() => null);
 // The canvas measures and draws with the font as soon as a tab opens: the
 // one shipped with the app must be loaded by then. A font of the system is
 // already there, and a name nobody knows falls back to the next in line.
@@ -95,7 +92,6 @@ function saveSoon(): void {
 const keyboard = attachKeyboard(() => tabs.activeId());
 const header = new Header({
   root: element("#header"),
-  home,
   onSpaceMenu: (anchor) => openSpaceMenu(anchor),
 });
 // The tab the window shows, for the header to follow it.

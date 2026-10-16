@@ -12,3 +12,11 @@ export const RENAME_ICON =
 /** A pushpin: pinning a tab, and taking the pin away. */
 export const PIN_ICON =
   '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" aria-hidden="true"><path d="M12 17V22M9 10.76C9 11.52 8.57 12.21 7.89 12.55L6.11 13.45C5.43 13.79 5 14.48 5 15.24V16C5 16.55 5.45 17 6 17H18C18.55 17 19 16.55 19 16V15.24C19 14.48 18.57 13.79 17.89 13.45L16.11 12.55C15.43 12.21 15 11.52 15 10.76V7C15 6.45 15.45 6 16 6C17.1 6 18 5.1 18 4C18 2.9 17.1 2 16 2H8C6.9 2 6 2.9 6 4C6 5.1 6.9 6 8 6C8.55 6 9 6.45 9 7V10.76Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/** A folder: the one a tab works in, in the header. */
+export const FOLDER_ICON =
+  '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>';
+
+/** A git branch, in the header. */
+export const BRANCH_ICON =
+  '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></svg>';
