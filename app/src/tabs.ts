@@ -762,7 +762,8 @@ export class Tabs {
     entry.row.style.setProperty("--tab-color", tab.look.color);
     entry.label.textContent = title;
     // One hover away: what the program says of itself, and the whole path.
-    const branch = tab.git && `${tab.git.branch}${tab.git.dirty ? " (changes to commit)" : ""}`;
+    const branch =
+      tab.git && `${tab.git.branch}${tab.git.changes > 0 ? " (changes to commit)" : ""}`;
     entry.row.title = [title, tab.title, tab.cwd, branch]
       .filter((line) => line !== null)
       .join("\n");

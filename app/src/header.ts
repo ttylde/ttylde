@@ -41,7 +41,7 @@ export class Header {
   private readonly folderName: HTMLElement;
   private readonly branch: HTMLElement;
   private readonly branchName: HTMLElement;
-  private readonly branchMark: HTMLElement;
+  private readonly changes: HTMLElement;
   // The whole path of the folder, which a click copies.
   private cwd: string | null = null;
 
@@ -66,8 +66,8 @@ export class Header {
 
     this.branch = span("header-chip header-branch");
     this.branchName = span("header-chip-text");
-    this.branchMark = span("header-branch-mark");
-    this.branch.append(icon(BRANCH_ICON), this.branchName, this.branchMark);
+    this.changes = span("header-changes");
+    this.branch.append(icon(BRANCH_ICON), this.branchName, this.changes);
 
     const where = span("header-where");
     where.append(this.folder, this.branch);
@@ -121,11 +121,12 @@ export class Header {
 
     this.branch.hidden = view.git === null;
     if (view.git) {
-      const { branch, dirty } = view.git;
+      const { branch, changes } = view.git;
       this.branchName.textContent = branch;
-      this.branchMark.textContent = dirty ? "●" : "✓";
-      this.branchMark.classList.toggle("dirty", dirty);
-      this.branch.title = `${branch}: ${dirty ? "changes to commit" : "nothing to commit"}`;
+      // `main*`: changes to commit, as prompts and editors write it.
+      // `main*`: changes to commit, as prompts and editors write it.
+      this.changes.textContent = changes > 0 ? "*" : "";
+      this.branch.title = `${branch}: ${commitText(changes)}`;
     }
   }
 
@@ -133,6 +134,11 @@ export class Header {
   setMenuOpen(open: boolean): void {
     this.spaceButton.classList.toggle("open", open);
   }
+}
+
+function commitText(changes: number): string {
+  if (changes === 0) return "nothing to commit";
+  return `${changes} ${changes === 1 ? "file" : "files"} with changes to commit`;
 }
 
 function span(className: string, text = ""): HTMLElement {

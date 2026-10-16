@@ -64,8 +64,8 @@ export type SavedState = {
   pinned: SavedTab[];
 };
 
-/** Mirror of `Status` in core/src/git.rs. */
-export type GitStatus = { branch: string; dirty: boolean };
+/** Mirror of `Status` in core/src/git.rs: `changes` is how many files. */
+export type GitStatus = { branch: string; changes: number };
 
 export type SessionEvent =
   | { type: "Frame"; data: Frame }

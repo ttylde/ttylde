@@ -607,12 +607,16 @@ body.collapsed .header-space.open {
   color: var(--ink);
 }
 
-.header-branch-mark {
-  color: #1f9a6a;
+/* Larger and bolder than the branch: an asterisk is small. In the colour
+   of the text: the colours of the header are for the states of the tab. */
+.header-changes {
+  margin-left: -3px;
+  color: var(--ink);
+  font: 700 14px / 1 var(--mono);
 }
 
-.header-branch-mark.dirty {
-  color: #8a7d12;
+.header-changes:empty {
+  display: none;
 }
 
 /* The terminal is a panel laid on the window. Its color is the background
