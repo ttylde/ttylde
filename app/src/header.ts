@@ -29,7 +29,8 @@ export type HeaderOptions = {
  * the button that opens the space menu.
  */
 export class Header {
-  private readonly space: HTMLButtonElement;
+  /** The space: with the sidebar collapsed, the button of the space menu. */
+  readonly spaceButton: HTMLButtonElement;
   private readonly spaceDot: HTMLElement;
   private readonly spaceName: HTMLElement;
   private readonly tab: HTMLElement;
@@ -43,15 +44,15 @@ export class Header {
 
   constructor(private options: HeaderOptions) {
     const { root } = options;
-    this.space = document.createElement("button");
-    this.space.type = "button";
-    this.space.className = "header-space";
+    this.spaceButton = document.createElement("button");
+    this.spaceButton.type = "button";
+    this.spaceButton.className = "header-space";
     this.spaceDot = span("header-dot");
     this.spaceName = span("header-space-name");
     const chevron = span("header-chevron");
     chevron.innerHTML =
       '<svg viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>';
-    this.space.append(this.spaceDot, this.spaceName, chevron);
+    this.spaceButton.append(this.spaceDot, this.spaceName, chevron);
 
     this.tab = span("header-tab");
 
@@ -66,14 +67,20 @@ export class Header {
 
     const where = span("header-where");
     where.append(this.folder, this.branch);
-    root.append(this.space, span("header-separator", "›"), this.tab, span("header-rule"), where);
+    root.append(
+      this.spaceButton,
+      span("header-separator", "›"),
+      this.tab,
+      span("header-rule"),
+      where,
+    );
 
     // The keyboard stays in the terminal.
-    for (const button of [this.space, this.folder]) {
+    for (const button of [this.spaceButton, this.folder]) {
       button.addEventListener("mousedown", (e) => e.preventDefault());
     }
-    this.space.addEventListener("click", () => {
-      if (document.body.classList.contains("collapsed")) options.onSpaceMenu(this.space);
+    this.spaceButton.addEventListener("click", () => {
+      if (document.body.classList.contains("collapsed")) options.onSpaceMenu(this.spaceButton);
     });
     this.folder.addEventListener("click", () => {
       if (this.cwd !== null) copy(this.cwd);
@@ -93,8 +100,8 @@ export class Header {
     this.spaceName.textContent = space?.name ?? (place === "pinned" ? "Pinned" : "No space");
     // The color is one of the palette, never text typed by someone.
     this.spaceDot.style.background = space?.color ?? "";
-    this.space.classList.toggle("none", space === null);
-    this.space.title = space ? "Switch space (⌃1…9)" : "";
+    this.spaceButton.classList.toggle("none", space === null);
+    this.spaceButton.title = space ? "Switch space (⌃1…9)" : "";
 
     this.tab.textContent = view.title;
 
@@ -117,7 +124,7 @@ export class Header {
 
   /** The space menu opened from here is open: the button shows it. */
   setMenuOpen(open: boolean): void {
-    this.space.classList.toggle("open", open);
+    this.spaceButton.classList.toggle("open", open);
   }
 }
 

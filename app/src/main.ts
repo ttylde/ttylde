@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { isFormOpen } from "./form";
 import { Header } from "./header";
-import { SIDEBAR_ICON } from "./icons";
+import { PLUS_ICON, SIDEBAR_ICON } from "./icons";
 import { attachKeyboard } from "./input";
 import { Launcher } from "./launcher";
 import { isMenuOpen, openMenu } from "./menu";
@@ -54,8 +54,9 @@ function setCollapsed(collapsed: boolean): void {
     localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
   } catch {}
 }
-// The icon is the same in both states: the style sheet turns it around.
+// The same icon whether it collapses or expands the sidebar.
 toggle.innerHTML = SIDEBAR_ICON;
+element("#new-tab .plus").innerHTML = PLUS_ICON;
 element("#new-tab .hint").textContent = NEW_TAB_HINT;
 try {
   showCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
@@ -191,9 +192,14 @@ const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
 // prompt of the launcher that wants it.
 window.addEventListener("focus", () => launcher.focus());
 
-// Where what belongs to the space opens: under its name, or beside the rail.
+// Where what belongs to the space opens: under its name in the sidebar; with
+// the sidebar collapsed under its name in the header, or beside the rail
+// when no space is open.
 function underSpace(): { left: number; top: number; width: number } {
   const collapsed = isCollapsed();
+  if (collapsed && !document.body.classList.contains("no-space")) {
+    return under(header.spaceButton);
+  }
   const anchor = (collapsed ? spaceDot : spaceName).getBoundingClientRect();
   const bounds = sidebar.getBoundingClientRect();
   return {

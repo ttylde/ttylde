@@ -391,11 +391,12 @@ body {
 
 /* As wide as the mark and the icon of a tab: the text lines up with theirs. */
 #new-tab .plus {
+  display: grid;
+  place-items: center;
   width: 30px;
   flex: none;
   box-sizing: border-box;
   padding-left: 14px;
-  text-align: center;
 }
 
 #new-tab .hint {
@@ -906,26 +907,31 @@ body.collapsed #group {
   width: 40px;
   align-items: center;
   gap: 4px;
-  padding: 8px 0 4px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.55);
+  padding: 4px 0;
 }
 
-/* In the rail the pinned tabs are a box of their own, under the first. */
+/* In the rail the pinned tabs come after a short line. */
 body.collapsed #pinned-group {
   width: 40px;
   align-items: center;
-  margin-top: 8px;
-  padding: 4px 0;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.55);
+  margin-top: 0;
+}
+
+body.collapsed #pinned-group::before {
+  content: "";
+  width: 20px;
+  height: 1px;
+  margin: 8px 0 4px;
+  background: rgba(21, 33, 28, 0.08);
 }
 
 body.collapsed #pinned {
   gap: 4px;
 }
 
-body.collapsed #space-dot {
+/* With a space open its name is the button in the header: the rail keeps
+   the dot only when there is none, the launcher has no header. */
+body.collapsed.no-space #space-dot {
   display: grid;
 }
 
@@ -938,15 +944,21 @@ body.collapsed .tab,
 body.collapsed #new-tab {
   justify-content: center;
   width: 32px;
-  height: 28px;
+  height: 30px;
   box-sizing: border-box;
   padding: 0;
-  border-radius: 6px;
+  border-radius: 7px;
+}
+
+/* In the rail the tab shown is lighter, without the edge of a row. */
+body.collapsed .tab.active {
+  border-color: transparent;
+  box-shadow: none;
 }
 
 body.collapsed #new-tab {
   height: 24px;
-  font-size: 13px;
+  border-radius: 6px;
 }
 
 body.collapsed #new-tab .plus {
@@ -976,12 +988,16 @@ body.collapsed #new-tab .hint {
 body.collapsed #footer {
   justify-content: center;
   width: 32px;
-  padding: 10px 0 0;
+  box-sizing: border-box;
+  padding: 6px 0 6px 10px;
 }
 
-/* The same icon, pointing the other way. */
-body.collapsed #toggle-sidebar svg {
-  transform: rotate(180deg);
+body.collapsed #toggle-sidebar {
+  padding: 0;
+}
+
+body.collapsed #toggle-sidebar:hover {
+  background: none;
 }
 
 /* What opens over the window: the menu of a row, the rename popover. A
