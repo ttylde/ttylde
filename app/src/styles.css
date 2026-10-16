@@ -344,6 +344,52 @@ body {
   color: var(--warning);
 }
 
+/* The state of a tab: running pulses, the others are steady; at the prompt
+   there is no dot. */
+.status-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-dot[data-status="ready"] {
+  display: none;
+}
+
+.status-dot[data-status="running"] {
+  background: #8a7d12;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.status-dot[data-status="active"] {
+  background: #1f52d6;
+}
+
+.status-dot[data-status="done"] {
+  background: #1f9a6a;
+}
+
+.status-dot[data-status="error"] {
+  background: var(--danger);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* The actions take its place under the pointer. */
+.tab:hover .tab-status,
+.tab.in-menu .tab-status {
+  visibility: hidden;
+}
+
 /* More and close, shown while the pointer is on the row or its menu is open. */
 .tab-actions {
   display: none;
@@ -522,6 +568,12 @@ body.collapsed .header-space.open {
   color: var(--ink);
   font: 600 12px var(--mono);
   text-overflow: ellipsis;
+}
+
+.header-status {
+  width: 7px;
+  height: 7px;
+  margin-left: 8px;
 }
 
 .header-rule {
@@ -964,6 +1016,24 @@ body.collapsed #new-tab {
 body.collapsed #new-tab .plus {
   width: auto;
   padding: 0;
+}
+
+/* In the rail the dot sits on the corner of the icon. */
+body.collapsed .tab {
+  position: relative;
+}
+
+body.collapsed .tab .tab-status {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+}
+
+body.collapsed .tab:hover .tab-status,
+body.collapsed .tab.in-menu .tab-status {
+  visibility: visible;
 }
 
 /* In the rail a tab is its icon alone, a little larger. */

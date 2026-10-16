@@ -6,6 +6,7 @@ import { closeMenu, openMenu } from "./menu";
 import { openRename } from "./rename";
 import { dropIndex, makeRoom } from "./reorder";
 import { createSpace, type Space, type SpaceChanges, stepIndex } from "./space";
+import { ACTIVE_AFTER, aged, DONE_FOR, describe, READY } from "./status";
 import {
   closeTab,
   defaultTitle,
@@ -44,7 +45,12 @@ type Entry = {
   icon: HTMLElement;
   label: HTMLElement;
   branch: HTMLElement;
+  /** The state of the tab, as a dot: see `status.ts`. */
+  dot: HTMLElement;
 };
+
+/** How often the time in the tooltips of the dots is brought up to date. */
+const TOOLTIP_EVERY = 30_000;
 
 /**
  * What is kept of a tab that closes: what it looked like, the folder it was
@@ -139,7 +145,15 @@ export class Tabs {
   private inMenu: Tab | null = null;
   // Tabs whose command starts again by itself at the first prompt.
   private waiting = new Map<Tab, string>();
-  constructor(private options: TabsOptions) {}
+  // The one timer of each tab with a state that changes by itself: running
+  // becoming active, done going back to ready.
+  private statusTimers = new Map<Tab, number>();
+  constructor(private options: TabsOptions) {
+    window.setInterval(() => {
+      for (const entry of this.entries) this.paintStatus(entry);
+      if (this.active) this.options.onActiveChange(this.active);
+    }, TOOLTIP_EVERY);
+  }
 
   /** Session id of the visible tab, the one the keyboard writes to. */
   activeId(): number | null {
@@ -312,6 +326,8 @@ export class Tabs {
     label.className = "tab-title";
     const branch = document.createElement("span");
     branch.className = "tab-branch";
+    const dot = document.createElement("span");
+    dot.className = "status-dot tab-status";
     const actions = document.createElement("span");
     actions.className = "tab-actions";
     const more = document.createElement("button");
@@ -323,7 +339,7 @@ export class Tabs {
     close.title = "Close tab";
     close.textContent = "×";
     actions.append(more, close);
-    row.append(mark, icon, label, branch, actions);
+    row.append(mark, icon, label, branch, dot, actions);
     (place === PINNED ? pinned : list).appendChild(row);
 
     row.addEventListener("click", () => this.activate(tab));
@@ -340,7 +356,9 @@ export class Tabs {
       this.close(tab);
     });
 
-    this.entries.push({ tab, space: place, row, icon, label, branch });
+    const entry: Entry = { tab, space: place, row, icon, label, branch, dot };
+    this.entries.push(entry);
+    this.paintStatus(entry);
     this.retitle(tab);
     if (place === this.space) {
       if (!from || !this.lastTab.has(place)) this.activate(tab);
@@ -397,8 +415,39 @@ export class Tabs {
   // A command of `tab` started or ended, or the shell is ready.
   private commandChanged(tab: Tab): void {
     if (tab.ready) this.runWaiting(tab);
+    this.scheduleStatus(tab);
+    const entry = this.entries.find((e) => e.tab === tab);
+    if (entry) this.paintStatus(entry);
     if (tab === this.active) this.options.onActiveChange(tab);
     this.changed();
+  }
+
+  // Sets the timer of the state that changes by itself: a running command
+  // becomes active after a while; done goes back to ready a moment after
+  // its tab is the one shown, and stays until then.
+  private scheduleStatus(tab: Tab): void {
+    window.clearTimeout(this.statusTimers.get(tab));
+    this.statusTimers.delete(tab);
+    const { status, since } = tab.status;
+    let wait: number | null = null;
+    if (status === "running") wait = since + ACTIVE_AFTER - Date.now();
+    if (status === "done" && tab === this.active) wait = DONE_FOR;
+    if (wait === null) return;
+
+    const timer = window.setTimeout(
+      () => {
+        this.statusTimers.delete(tab);
+        tab.status = status === "done" ? READY : aged(tab.status, Date.now());
+        this.commandChanged(tab);
+      },
+      Math.max(0, wait),
+    );
+    this.statusTimers.set(tab, timer);
+  }
+
+  private paintStatus({ tab, dot }: Entry): void {
+    dot.dataset.status = tab.status.status;
+    dot.title = describe(tab.status, Date.now());
   }
 
   /**
@@ -693,6 +742,8 @@ export class Tabs {
       entry.row.classList.toggle("active", isActive);
       if (isActive) this.lastTab.set(entry.space, tab);
     }
+    // Done is seen now: in a moment it goes back to ready.
+    if (tab.status.status === "done") this.scheduleStatus(tab);
     this.options.onActiveChange(tab);
     this.changed();
   }
@@ -952,6 +1003,8 @@ export class Tabs {
     if (tab === this.inMenu) closeMenu();
     this.entries.splice(this.entries.indexOf(entry), 1);
     this.waiting.delete(tab);
+    window.clearTimeout(this.statusTimers.get(tab));
+    this.statusTimers.delete(tab);
     entry.row.remove();
     closeTab(tab);
     this.changed();

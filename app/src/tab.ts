@@ -4,6 +4,7 @@ import { folderName } from "./label";
 import { defaultLook, type Look } from "./look";
 import { attachMouse } from "./mouse";
 import { fontStack, Renderer } from "./renderer";
+import { ended, READY, started, type TabStatus } from "./status";
 import type { Font, GitStatus, SessionEvent } from "./types";
 
 /** One session with the canvas it is drawn on. */
@@ -27,6 +28,8 @@ export type Tab = {
   ready: boolean;
   /** A command that was running last time, offered to start again. */
   offer: string | null;
+  /** Running a command, done with one, or at the prompt: the dot. */
+  status: TabStatus;
   /** Name, color and icon the user chose. */
   look: Look;
   /** Background of the last frame, `null` before the first one. */
@@ -87,6 +90,7 @@ export async function openTab(
     restart: null,
     ready: false,
     offer: null,
+    status: READY,
     look: defaultLook(),
     background: null,
     canvas,
@@ -129,6 +133,7 @@ export async function openTab(
         break;
       case "CommandStart":
         if (event.data !== null) tab.command = event.data;
+        tab.status = started(tab.status, Date.now());
         tab.restart = null;
         // Another command than the one offered: the offer is over.
         tab.offer = null;
@@ -140,6 +145,7 @@ export async function openTab(
         break;
       case "CommandEnd":
         tab.restart = null;
+        tab.status = ended(tab.status, event.data, Date.now());
         handlers.onCommand(tab);
         break;
       case "Bell":
