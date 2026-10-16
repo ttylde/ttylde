@@ -2,7 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { isFormOpen } from "./form";
-import { SIDEBAR_ICON } from "./icons";
+import { Header } from "./header";
+import { PLUS_ICON, SIDEBAR_ICON } from "./icons";
 import { attachKeyboard } from "./input";
 import { Launcher } from "./launcher";
 import { isMenuOpen, openMenu } from "./menu";
@@ -11,7 +12,7 @@ import { fontStack } from "./renderer";
 import { actionOf, NEW_TAB_HINT } from "./shortcuts";
 import { ago, tabCount } from "./space";
 import { openSpaceSettings } from "./space-settings";
-import { defaultTitle } from "./tab";
+import { defaultTitle, type Tab, titleOf } from "./tab";
 import { Tabs } from "./tabs";
 import type { Font, SavedState } from "./types";
 
@@ -53,8 +54,9 @@ function setCollapsed(collapsed: boolean): void {
     localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
   } catch {}
 }
-// The icon is the same in both states: the style sheet turns it around.
+// The same icon whether it collapses or expands the sidebar.
 toggle.innerHTML = SIDEBAR_ICON;
+element("#new-tab .plus").innerHTML = PLUS_ICON;
 element("#new-tab .hint").textContent = NEW_TAB_HINT;
 try {
   showCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
@@ -89,6 +91,23 @@ function saveSoon(): void {
 }
 
 const keyboard = attachKeyboard(() => tabs.activeId());
+const header = new Header({
+  root: element("#header"),
+  onSpaceMenu: (anchor) => openSpaceMenu(anchor),
+});
+// The tab the window shows, for the header to follow it.
+let shown: Tab | null = null;
+function showHeader(): void {
+  header.show(
+    shown && {
+      place: tabs.activePlace(),
+      title: titleOf(shown),
+      git: shown.git,
+      cwd: shown.cwd,
+    },
+  );
+}
+
 const tabs = new Tabs({
   list,
   pinned,
@@ -98,6 +117,8 @@ const tabs = new Tabs({
   // The window follows the visible tab. The frame around the canvas takes
   // the background of what is drawn in it. With no tab, the launcher.
   onActiveChange(tab) {
+    shown = tab;
+    showHeader();
     document.body.classList.toggle("empty", tab === null);
     offer.show(tab?.offer ?? null);
     if (!tab) {
@@ -115,6 +136,8 @@ const tabs = new Tabs({
     if (!isFormOpen()) keyboard.focus();
   },
   onSpaceChange(space) {
+    // Its name or its color may have changed.
+    showHeader();
     document.body.classList.toggle("no-space", space === null);
     const name = space?.name ?? "Open a space";
     element("#space .name").textContent = name;
@@ -169,9 +192,14 @@ const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
 // prompt of the launcher that wants it.
 window.addEventListener("focus", () => launcher.focus());
 
-// Where what belongs to the space opens: under its name, or beside the rail.
+// Where what belongs to the space opens: under its name in the sidebar; with
+// the sidebar collapsed under its name in the header, or beside the rail
+// when no space is open.
 function underSpace(): { left: number; top: number; width: number } {
   const collapsed = isCollapsed();
+  if (collapsed && !document.body.classList.contains("no-space")) {
+    return under(header.spaceButton);
+  }
   const anchor = (collapsed ? spaceDot : spaceName).getBoundingClientRect();
   const bounds = sidebar.getBoundingClientRect();
   return {
@@ -197,11 +225,19 @@ function openSettings(): void {
   });
 }
 
-// The menu of the spaces.
-function openSpaceMenu(): void {
-  spaceName.classList.add("open");
+// Under the space in the header, where it is asked for with the sidebar
+// collapsed.
+function under(anchor: HTMLElement): { left: number; top: number; width: number } {
+  const bounds = anchor.getBoundingClientRect();
+  return { left: bounds.left, top: bounds.bottom + 6, width: 240 };
+}
+
+// The menu of the spaces, under the space in the sidebar, or under `anchor`.
+function openSpaceMenu(anchor?: HTMLElement): void {
+  if (anchor) header.setMenuOpen(true);
+  else spaceName.classList.add("open");
   openMenu({
-    ...underSpace(),
+    ...(anchor ? under(anchor) : underSpace()),
     items: [
       ...tabs.spaceList().map(({ space, tabs: count, current, closedAt }, index) => ({
         label: space.name,
@@ -234,15 +270,18 @@ function openSpaceMenu(): void {
           ]
         : []),
     ],
-    onClose: () => spaceName.classList.remove("open"),
+    onClose: () => {
+      spaceName.classList.remove("open");
+      header.setMenuOpen(false);
+    },
   });
 }
 
 // Clicks in the sidebar must not take the focus away from the keyboard.
 sidebar.addEventListener("mousedown", (e) => e.preventDefault());
 newTab.addEventListener("click", () => void tabs.open());
-spaceName.addEventListener("click", openSpaceMenu);
-spaceDot.addEventListener("click", openSpaceMenu);
+spaceName.addEventListener("click", () => openSpaceMenu());
+spaceDot.addEventListener("click", () => openSpaceMenu());
 closeSpace.addEventListener("click", () => tabs.closeSpace());
 // The terminal area changes size: the observer below refits the tabs.
 toggle.addEventListener("click", () => setCollapsed(!isCollapsed()));

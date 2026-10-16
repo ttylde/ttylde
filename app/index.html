@@ -24,7 +24,7 @@
         <button id="space-dot" type="button"><span class="dot"></span></button>
         <div id="tabs"></div>
         <div id="new-tab" title="New tab">
-          <span class="plus">+</span><span class="text">New tab</span><span class="hint"></span>
+          <span class="plus"></span><span class="text">New tab</span><span class="hint"></span>
         </div>
       </div>
       <div id="pinned-group">
@@ -36,6 +36,7 @@
       </div>
     </aside>
     <main id="stage" data-tauri-drag-region>
+      <header id="header" class="empty" data-tauri-drag-region></header>
       <div id="terminal"><div id="screens"></div><div id="offer" hidden></div><div id="launcher" hidden></div></div>
     </main>
     <script type="module" src="/src/main.ts"></script>

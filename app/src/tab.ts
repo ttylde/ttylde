@@ -162,6 +162,14 @@ export async function openTab(
   return tab;
 }
 
+/** What a tab with no name, no title and no known folder is called. */
+export const UNTITLED = "shell";
+
+/** What the tab is called: the name the user gave it, or the default one. */
+export function titleOf(tab: Tab): string {
+  return tab.look.name ?? defaultTitle(tab) ?? UNTITLED;
+}
+
 /**
  * What the tab is called when the user gave it no name: the folder it
  * works in or, until that is known, the title of its program. The folder

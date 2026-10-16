@@ -16,12 +16,11 @@ import {
   type Tab,
   type TabHandlers,
   type TabStart,
+  titleOf,
   typeCommand,
+  UNTITLED,
 } from "./tab";
 import type { Font, SavedState, SavedTab } from "./types";
-
-/** Shown in the sidebar for a tab with no title and no known folder. */
-const UNTITLED = "shell";
 
 /** How far the pointer moves, in pixels, before a press on a row is a drag. */
 const DRAG_THRESHOLD = 4;
@@ -145,6 +144,15 @@ export class Tabs {
   /** Session id of the visible tab, the one the keyboard writes to. */
   activeId(): number | null {
     return this.active?.id ?? null;
+  }
+
+  /**
+   * Where the visible tab belongs: its space, `"pinned"`, or `null` for a
+   * tab without a space or no tab at all.
+   */
+  activePlace(): Space | "pinned" | null {
+    const place = this.placeOf(this.active);
+    return place === undefined ? null : place;
   }
 
   /** How many tabs are open without a space. */
@@ -692,7 +700,7 @@ export class Tabs {
   private retitle(tab: Tab): void {
     const entry = this.entries.find((e) => e.tab === tab);
     if (!entry) return;
-    const title = tab.look.name ?? defaultTitle(tab) ?? UNTITLED;
+    const title = titleOf(tab);
     entry.icon.innerHTML = iconMarkup(tab.look.icon);
     entry.row.style.setProperty("--tab-color", tab.look.color);
     entry.label.textContent = title;
