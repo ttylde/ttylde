@@ -4,7 +4,8 @@
 //! state under `$XDG_STATE_HOME`. A debug build, the one `tauri dev` runs,
 //! keeps all of them in `.dev/` at the root of the repository, out of git:
 //! trying a change touches nothing outside the project, `rm -rf .dev` starts
-//! over, and each worktree has its own. Its config is `.dev/config.toml`,
+//! over, and each worktree has its own. The history goes there too. Its
+//! config is `.dev/config.toml`,
 //! which no one has until they write it: `dev/config.example.toml` is where
 //! to start.
 
@@ -16,6 +17,14 @@ pub fn config() -> Option<PathBuf> {
     return Some(dev_folder().join("config.toml"));
     #[cfg(not(debug_assertions))]
     return ttylde_core::config::default_path();
+}
+
+/// The history of commands, a SQLite file.
+pub fn history() -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    return Some(dev_folder().join("history.db"));
+    #[cfg(not(debug_assertions))]
+    return ttylde_core::history::default_path();
 }
 
 /// The state file to read and write.

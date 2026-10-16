@@ -1,5 +1,5 @@
-//! The config file: font, theme, shell integration and what to start again
-//! on resume, in TOML.
+//! The config file: font, theme, shell integration, what to start again on
+//! resume and what the history keeps, in TOML.
 //!
 //! Everything in the file is optional. Serde checks its shape through the
 //! `Raw*` types, where every field may be missing; the values are checked
@@ -27,6 +27,7 @@ pub struct Config {
     /// On unless the file turns it off.
     pub shell_integration: bool,
     pub restore: Restore,
+    pub history: HistoryConfig,
 }
 
 impl Default for Config {
@@ -36,6 +37,39 @@ impl Default for Config {
             theme: Theme::default(),
             shell_integration: true,
             restore: Restore::default(),
+            history: HistoryConfig::default(),
+        }
+    }
+}
+
+/// What the history of commands keeps: see `history`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HistoryConfig {
+    /// `false`: no command is saved.
+    pub enabled: bool,
+    /// The oldest entries go once there are more.
+    pub max_entries: u32,
+    /// Entries older than this go, in milliseconds; `None`: none for age.
+    pub max_age: Option<u64>,
+    /// Commands with a known key or token in them are not saved.
+    pub secrets_filter: bool,
+    /// Regexes: a command matching one is not saved. Checked when the file
+    /// is read, so these always compile.
+    pub exclude: Vec<String>,
+    /// Folders, `~` for the home, `*` for any text: nothing run in one of
+    /// them, or under it, is saved.
+    pub exclude_folders: Vec<String>,
+}
+
+impl Default for HistoryConfig {
+    fn default() -> Self {
+        HistoryConfig {
+            enabled: true,
+            max_entries: 50_000,
+            max_age: None,
+            secrets_filter: true,
+            exclude: Vec::new(),
+            exclude_folders: Vec::new(),
         }
     }
 }
@@ -76,7 +110,7 @@ impl Restore {
 
 /// Whether `text` matches `pattern` whole: `*` is any text, `?` any one
 /// character, the rest stands for itself.
-fn glob(pattern: &str, text: &str) -> bool {
+pub(crate) fn glob(pattern: &str, text: &str) -> bool {
     let pattern: Vec<char> = pattern.chars().collect();
     let text: Vec<char> = text.chars().collect();
     // Where to go back to at the last `*`: its position, and the text it
@@ -151,6 +185,7 @@ impl Config {
                 run: run(parsed.restore.run)?,
                 patterns: parsed.restore.patterns.unwrap_or_default(),
             },
+            history: history(parsed.history)?,
             font: Font {
                 family: parsed.font.family.unwrap_or(d_font.family),
                 size: size(parsed.font.size, d_font.size)?,
@@ -183,6 +218,18 @@ struct RawConfig {
     theme: RawTheme,
     shell_integration: Option<bool>,
     restore: RawRestore,
+    history: RawHistory,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+struct RawHistory {
+    enabled: Option<bool>,
+    max_entries: Option<u32>,
+    max_age: Option<String>,
+    secrets_filter: Option<bool>,
+    exclude: Option<Vec<String>>,
+    exclude_folders: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default)]
@@ -271,6 +318,57 @@ fn run(value: Option<String>) -> Result<Run> {
             "restore.run: `{other}` is not `ask`, `all` or `matching`"
         ))),
     }
+}
+
+/// The `[history]` the file sets; what it leaves out keeps its default.
+fn history(raw: RawHistory) -> Result<HistoryConfig> {
+    let default = HistoryConfig::default();
+    let max_entries = raw.max_entries.unwrap_or(default.max_entries);
+    if max_entries == 0 {
+        return Err(Error::Config(
+            "history.max_entries: 0 keeps nothing, set `enabled = false` instead".into(),
+        ));
+    }
+    let max_age = raw
+        .max_age
+        .map(|text| {
+            age(&text).ok_or_else(|| {
+                Error::Config(format!(
+                    "history.max_age: `{text}` is not an age like `30d`, `12w`, `6m` or `1y`"
+                ))
+            })
+        })
+        .transpose()?;
+    let exclude = raw.exclude.unwrap_or_default();
+    for (i, pattern) in exclude.iter().enumerate() {
+        if let Err(e) = regex::Regex::new(pattern) {
+            return Err(Error::Config(format!("history.exclude[{i}]: {e}")));
+        }
+    }
+    Ok(HistoryConfig {
+        enabled: raw.enabled.unwrap_or(default.enabled),
+        max_entries,
+        max_age,
+        secrets_filter: raw.secrets_filter.unwrap_or(default.secrets_filter),
+        exclude,
+        exclude_folders: raw.exclude_folders.unwrap_or_default(),
+    })
+}
+
+/// `30d`, `12w`, `6m`, `1y` in milliseconds: days, weeks, months of 30
+/// days, years of 365.
+fn age(text: &str) -> Option<u64> {
+    let text = text.trim();
+    let unit = text.chars().last()?;
+    let count: u64 = text[..text.len() - unit.len_utf8()].trim().parse().ok()?;
+    let days = match unit {
+        'd' => 1,
+        'w' => 7,
+        'm' => 30,
+        'y' => 365,
+        _ => return None,
+    };
+    (count > 0).then(|| count * days * 24 * 3600 * 1000)
 }
 
 /// The font size the file sets, or `default` if it leaves it out.
@@ -570,6 +668,59 @@ mod tests {
         let config = Config::parse(&readme[start..end]).unwrap();
         assert!(config.shell_integration);
         assert_eq!(config.restore.run, Run::Matching);
+    }
+
+    #[test]
+    fn the_history_keeps_fifty_thousand_entries_and_filters_secrets() {
+        let history = Config::parse("").unwrap().history;
+        assert!(history.enabled);
+        assert_eq!(history.max_entries, 50_000);
+        assert_eq!(history.max_age, None);
+        assert!(history.secrets_filter);
+    }
+
+    #[test]
+    fn the_history_can_be_set() {
+        let history = Config::parse(
+            r#"
+            [history]
+            enabled = false
+            max_entries = 1000
+            max_age = "2w"
+            secrets_filter = false
+            exclude = ["^export ", "password"]
+            exclude_folders = ["~/clients/*"]
+            "#,
+        )
+        .unwrap()
+        .history;
+        assert!(!history.enabled);
+        assert_eq!(history.max_entries, 1000);
+        assert_eq!(history.max_age, Some(14 * 24 * 3600 * 1000));
+        assert!(!history.secrets_filter);
+        assert_eq!(history.exclude, ["^export ", "password"]);
+        assert_eq!(history.exclude_folders, ["~/clients/*"]);
+    }
+
+    #[test]
+    fn ages_are_days_weeks_months_years() {
+        let day = 24 * 3600 * 1000;
+        assert_eq!(age("30d"), Some(30 * day));
+        assert_eq!(age("6m"), Some(180 * day));
+        assert_eq!(age("1y"), Some(365 * day));
+        assert_eq!(age("0d"), None);
+        assert_eq!(age("1h"), None);
+        assert_eq!(age("y"), None);
+        assert_eq!(age(""), None);
+    }
+
+    // The errors name the field, and the pattern that does not compile.
+    #[test]
+    fn a_bad_history_setting_is_an_error() {
+        assert!(config_error("[history]\nmax_age = \"soon\"").contains("history.max_age"));
+        assert!(config_error("[history]\nmax_entries = 0").contains("history.max_entries"));
+        let message = config_error("[history]\nexclude = [\"ok\", \"(\"]");
+        assert!(message.contains("history.exclude[1]"), "{message}");
     }
 
     fn temp_file(name: &str) -> PathBuf {

@@ -8,6 +8,7 @@ mod sessions;
 use sessions::Sessions;
 use tauri::Manager;
 use ttylde_core::config::Config;
+use ttylde_core::history::{Filter, History, Limits};
 
 fn main() {
     let config = places::config()
@@ -17,6 +18,8 @@ fn main() {
             eprintln!("ttylde: {e}");
             Config::default()
         });
+
+    let history = open_history(&config);
 
     tauri::Builder::default()
         .manage(config)
@@ -28,7 +31,7 @@ fn main() {
                 .map(|dir| dir.join("shell-integration"))
                 .inspect_err(|e| eprintln!("ttylde: no shell integration: {e}"))
                 .ok();
-            app.manage(Sessions::new(scripts));
+            app.manage(Sessions::new(scripts, history));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -45,6 +48,7 @@ fn main() {
             sessions::session_select_clear,
             sessions::session_selection_text,
             sessions::session_close,
+            sessions::session_set_space,
             sessions::session_focus,
             sessions::restore_runs_by_itself,
             saved::state_load,
@@ -52,4 +56,18 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Ttylde");
+}
+
+/// The history of commands, as the config file asks. Turned off, or a file
+/// that cannot be opened, is none: the app works the same, saving nothing.
+fn open_history(config: &Config) -> Option<History> {
+    if !config.history.enabled {
+        return None;
+    }
+    let path = places::history()?;
+    let home = std::env::home_dir();
+    let filter = Filter::new(&config.history, home.as_deref());
+    History::open(&path, filter, Limits::from(&config.history))
+        .inspect_err(|e| eprintln!("ttylde: {e}"))
+        .ok()
 }

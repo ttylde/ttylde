@@ -14,6 +14,7 @@ import {
   openTab,
   resizeTab,
   runsByItself,
+  setTabSpace,
   type Tab,
   type TabHandlers,
   type TabStart,
@@ -356,6 +357,7 @@ export class Tabs {
 
     const entry: Entry = { tab, space: place, row, icon, label, dot };
     this.entries.push(entry);
+    placed(entry);
     this.paintStatus(entry);
     this.retitle(tab);
     if (place === this.space) {
@@ -545,6 +547,7 @@ export class Tabs {
     this.entries.splice(this.entries.indexOf(entry), 1);
     this.entries.push(entry);
     entry.space = space;
+    placed(entry);
     entry.row.hidden = true;
     this.options.list.append(entry.row);
     if (this.lastTab.get(from) === tab) {
@@ -633,6 +636,7 @@ export class Tabs {
     for (const entry of moved) {
       if (this.lastTab.get(entry.space) === entry.tab) this.lastTab.delete(entry.space);
       entry.space = space;
+      placed(entry);
     }
     this.lastTab.set(space, front);
     if (this.closed.has(space)) await this.reopen(space, false);
@@ -874,6 +878,7 @@ export class Tabs {
     this.entries.splice(this.entries.indexOf(entry), 1);
     this.entries.push(entry);
     entry.space = target;
+    placed(entry);
     entry.row.hidden = false;
     (target === PINNED ? this.options.pinned : this.options.list).append(entry.row);
     if (this.lastTab.get(from) === entry.tab) {
@@ -1069,4 +1074,10 @@ function toSaved({ look, cwd, command, restart }: Kept): SavedTab {
 // A file from before the commands were kept has none.
 function fromSaved({ cwd, command, restart, ...look }: SavedTab): Kept {
   return { look, cwd, command: command ?? null, restart: restart ?? null };
+}
+
+// Tells the session of `entry` the space its tab is in now, for the
+// commands it records in the history.
+function placed({ tab, space }: Entry): void {
+  setTabSpace(tab, space === null || space === PINNED ? null : space.id);
 }

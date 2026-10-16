@@ -7,13 +7,15 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use portable_pty::CommandBuilder;
 use tauri::ipc::Channel;
 use tauri::State;
 use ttylde_core::config::{Config, Font};
 use ttylde_core::emulator::{SelectionKind, SelectionSide};
+use ttylde_core::history::{History, Recorder};
 use ttylde_core::input::{Key, Mods, MouseEvent};
 use ttylde_core::session::{Session, SessionEvent};
 use ttylde_core::shell;
@@ -27,14 +29,21 @@ pub struct Sessions {
     /// The shell integration scripts the app ships, `None` if the folder of
     /// its resources is not known: the shells then start without them.
     scripts: Option<PathBuf>,
+    /// Where the commands that end are kept; `None`: nowhere, it is off or
+    /// could not be opened.
+    history: Option<Arc<Mutex<History>>>,
+    /// What each session is in the middle of, for the history.
+    recorders: Mutex<HashMap<u32, Arc<Mutex<Recorder>>>>,
 }
 
 impl Sessions {
-    pub fn new(scripts: Option<PathBuf>) -> Self {
+    pub fn new(scripts: Option<PathBuf>, history: Option<History>) -> Self {
         Sessions {
             next_id: AtomicU32::new(0),
             open: Mutex::new(HashMap::new()),
             scripts,
+            history: history.map(|history| Arc::new(Mutex::new(history))),
+            recorders: Mutex::new(HashMap::new()),
         }
     }
 
@@ -81,14 +90,25 @@ pub fn session_open(
         shell::integrate(&mut cmd, program.as_ref(), scripts, &shell::nonce());
     }
 
+    let recorder = Arc::new(Mutex::new(Recorder::default()));
+    let history = state.history.clone();
+    let recording = Arc::clone(&recorder);
     let session = Session::spawn(
         cmd,
         cols,
         rows,
         config.theme.clone(),
         10_000,
-        // If the webview is gone the send fails: nothing to do about it.
         Box::new(move |event| {
+            if let Some(history) = &history {
+                let ended = recording.lock().unwrap().observe(&event, now());
+                if let Some(record) = ended {
+                    if let Err(e) = history.lock().unwrap().record(&record) {
+                        eprintln!("ttylde: {e}");
+                    }
+                }
+            }
+            // If the webview is gone the send fails: nothing to do about it.
             let _ = on_event.send(event);
         }),
     )
@@ -96,6 +116,7 @@ pub fn session_open(
 
     let id = state.allocate_id();
     state.open.lock().unwrap().insert(id, session);
+    state.recorders.lock().unwrap().insert(id, recorder);
     Ok(id)
 }
 
@@ -202,6 +223,24 @@ pub fn session_selection_text(
 #[tauri::command]
 pub fn session_close(state: State<'_, Sessions>, id: u32) {
     state.open.lock().unwrap().remove(&id);
+    state.recorders.lock().unwrap().remove(&id);
+}
+
+/// The tab of the session is now in the space `space`; `None`: pinned, or
+/// in no space. The history records it with the commands that end.
+#[tauri::command]
+pub fn session_set_space(state: State<'_, Sessions>, id: u32, space: Option<u32>) {
+    if let Some(recorder) = state.recorders.lock().unwrap().get(&id) {
+        recorder.lock().unwrap().set_space(space);
+    }
+}
+
+// Milliseconds since 1970, as the history keeps time.
+fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or_default()
 }
 
 /// The window gained or lost the focus, or the tab became the visible one.
