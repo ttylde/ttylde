@@ -22,8 +22,8 @@ use serde::Serialize;
 pub struct Status {
     /// The branch, or the start of the commit when `HEAD` is on none.
     pub branch: String,
-    /// How many files have changes to commit, files never added included.
-    pub changes: u32,
+    /// There are changes to commit, files never added included.
+    pub dirty: bool,
 }
 
 /// How many characters of a commit stand for it.
@@ -44,7 +44,7 @@ pub fn status(folder: &Path) -> Option<Status> {
 
     Some(Status {
         branch: parse_head(&head)?,
-        changes: changes(&repository.root),
+        dirty: is_dirty(&repository.root),
     })
 }
 
@@ -88,10 +88,9 @@ fn parse_head(text: &str) -> Option<String> {
     is_commit.then(|| text[..SHORT_COMMIT].to_string())
 }
 
-/// Asks git how many files of `root` have changes: one line each in the
-/// short status. Without git, or if it fails, the answer is none: a mark
-/// that is wrong is worse than one that is missing.
-fn changes(root: &Path) -> u32 {
+/// Asks git whether `root` has changes. Without git, or if it fails, the
+/// answer is no: a mark that is wrong is worse than one that is missing.
+fn is_dirty(root: &Path) -> bool {
     Command::new("git")
         // Looking must not take the lock a command of the user is waiting for.
         .arg("--no-optional-locks")
@@ -101,13 +100,7 @@ fn changes(root: &Path) -> u32 {
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .map_or(0, |output| {
-            let lines = output.stdout.split(|&b| b == b'\n');
-            let files = lines.filter(|line| !line.is_empty()).count();
-            u32::try_from(files).unwrap_or(u32::MAX)
-        })
+        .is_ok_and(|output| output.status.success() && !output.stdout.is_empty())
 }
 
 /// Shortest time between two looks at the repository.
@@ -280,7 +273,7 @@ mod tests {
     fn clean(branch: &str) -> Option<Status> {
         Some(Status {
             branch: branch.to_string(),
-            changes: 0,
+            dirty: false,
         })
     }
 
@@ -370,18 +363,17 @@ mod tests {
     }
 
     #[test]
-    fn new_files_are_changes_to_commit() {
+    fn a_new_file_makes_the_repository_dirty() {
         let dir = TempDir::new();
         git(&dir.0, &["init", "--quiet", "--initial-branch=work"]);
         assert_eq!(status(&dir.0), clean("work"));
 
         dir.write("new.txt", "hello");
-        dir.write("other.txt", "hello");
         assert_eq!(
             status(&dir.0),
             Some(Status {
                 branch: "work".into(),
-                changes: 2
+                dirty: true
             })
         );
     }

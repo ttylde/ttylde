@@ -770,7 +770,7 @@ mod tests {
             &rx,
             SessionEvent::Git(Some(Status {
                 branch: "main".into(),
-                changes: 0,
+                dirty: false,
             })),
         );
         std::fs::remove_dir_all(&folder).unwrap();

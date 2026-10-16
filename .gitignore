@@ -6,3 +6,5 @@ app/src-tauri/gen
 .vscode/
 .tokensave/
 .dev/
+# zsh compiles what it sources: never ship a stale copy of the scripts.
+*.zwc

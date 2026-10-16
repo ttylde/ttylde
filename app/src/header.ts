@@ -121,12 +121,12 @@ export class Header {
 
     this.branch.hidden = view.git === null;
     if (view.git) {
-      const { branch, changes } = view.git;
+      const { branch, dirty } = view.git;
       this.branchName.textContent = branch;
       // `main*`: changes to commit, as prompts and editors write it.
       // `main*`: changes to commit, as prompts and editors write it.
-      this.changes.textContent = changes > 0 ? "*" : "";
-      this.branch.title = `${branch}: ${commitText(changes)}`;
+      this.changes.textContent = dirty ? "*" : "";
+      this.branch.title = `${branch}: ${dirty ? "changes to commit" : "nothing to commit"}`;
     }
   }
 
@@ -134,11 +134,6 @@ export class Header {
   setMenuOpen(open: boolean): void {
     this.spaceButton.classList.toggle("open", open);
   }
-}
-
-function commitText(changes: number): string {
-  if (changes === 0) return "nothing to commit";
-  return `${changes} ${changes === 1 ? "file" : "files"} with changes to commit`;
 }
 
 function span(className: string, text = ""): HTMLElement {
