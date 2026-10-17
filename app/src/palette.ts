@@ -36,7 +36,7 @@ export type PaletteOptions = {
   onClose(): void;
 };
 
-type Tab = "recent" | "actions";
+export type Tab = "recent" | "actions";
 type Scope = "space" | "all";
 type Setting = "rename" | "color" | "folder" | "shell" | "delete";
 
@@ -53,7 +53,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 /**
- * The palette (`Cmd+K`): the commands run before, from the history, and the
+ * The palette (`Cmd+P`, `Cmd+Shift+P` on its actions): the commands run before, from the history, and the
  * actions of the app, searched by typing. Recent lists each command once,
  * by day; typed text finds them as a fuzzy search does. Actions include
  * the settings of the space shown, which change as they are edited.
@@ -127,9 +127,14 @@ export class Palette {
     return !this.panel.hidden;
   }
 
-  /** Opens on Recent, with nothing typed. */
-  open(): void {
-    this.tab = "recent";
+  /** The tab shown, while it is open. */
+  get shownTab(): Tab {
+    return this.tab;
+  }
+
+  /** Opens on `tab`, with nothing typed. */
+  open(tab: Tab = "recent"): void {
+    this.tab = tab;
     this.scope = this.options.space() ? "space" : "all";
     this.input.value = "";
     this.selected = 0;

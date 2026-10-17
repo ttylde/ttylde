@@ -21,16 +21,23 @@ describe("actionOf", () => {
     expect(action).toEqual({ type: "new-tab" });
   });
 
-  test("Cmd+K opens the palette on macOS, Ctrl+Shift+K elsewhere", () => {
-    expect(actionOf(stroke({ key: "k", code: "KeyK", metaKey: true }), true)).toEqual({
+  // As in VS Code: Cmd+P on the commands, Cmd+Shift+P on the actions.
+  test("Cmd+P opens the palette, Cmd+Shift+P on its actions", () => {
+    expect(actionOf(stroke({ key: "p", code: "KeyP", metaKey: true }), true)).toEqual({
       type: "palette",
+      tab: "recent",
     });
+    expect(
+      actionOf(stroke({ key: "P", code: "KeyP", metaKey: true, shiftKey: true }), true),
+    ).toEqual({ type: "palette", tab: "actions" });
+    // Off macOS the modifier of the app is Ctrl+Shift.
     const mods = { ctrlKey: true, shiftKey: true };
-    expect(actionOf(stroke({ key: "K", code: "KeyK", ...mods }), false)).toEqual({
+    expect(actionOf(stroke({ key: "P", code: "KeyP", ...mods }), false)).toEqual({
       type: "palette",
+      tab: "recent",
     });
-    // Ctrl+K kills to the end of the line in the shell.
-    expect(actionOf(stroke({ key: "k", code: "KeyK", ctrlKey: true }), true)).toBeNull();
+    // Ctrl+P is the command before in the shell.
+    expect(actionOf(stroke({ key: "p", code: "KeyP", ctrlKey: true }), true)).toBeNull();
   });
 
   // Digits select tabs by position, counting from one.

@@ -9,7 +9,8 @@ export type Action =
   /** `step` is 1 for the next space, -1 for the one before. */
   | { type: "step-space"; step: number }
   | { type: "toggle-sidebar" }
-  | { type: "palette" };
+  /** The palette, open on Recent or on Actions, as in VS Code. */
+  | { type: "palette"; tab: "recent" | "actions" };
 
 /** The parts of a `KeyboardEvent` a shortcut depends on. */
 export type KeyStroke = Pick<
@@ -23,7 +24,7 @@ const IS_MAC = typeof navigator !== "undefined" && navigator.userAgent.includes(
 export const NEW_TAB_HINT = IS_MAC ? "⌘T" : "Ctrl+Shift+T";
 
 /** How the shortcut of the palette is written on this platform. */
-export const PALETTE_HINT = IS_MAC ? "⌘K" : "Ctrl+Shift+K";
+export const PALETTE_HINT = IS_MAC ? "⌘P" : "Ctrl+Shift+P";
 
 function hasAppModifier(e: KeyStroke, mac: boolean): boolean {
   if (e.altKey) return false;
@@ -39,9 +40,14 @@ export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
     const digit = /^Digit([1-9])$/.exec(e.code);
     if (digit && !e.shiftKey) return { type: "select-space", index: Number(digit[1]) - 1 };
   }
+  // Cmd+Shift+P opens the palette on its actions, as in VS Code. Off macOS
+  // Shift is already part of the modifier of the app.
+  if (mac && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "p") {
+    return { type: "palette", tab: "actions" };
+  }
   if (!hasAppModifier(e, mac)) return null;
   if (e.key.toLowerCase() === "t") return { type: "new-tab" };
-  if (e.key.toLowerCase() === "k") return { type: "palette" };
+  if (e.key.toLowerCase() === "p") return { type: "palette", tab: "recent" };
   // `key`, not `code`: the backslash sits on different keys across layouts.
   // With Shift held it is the bar.
   if (e.key === "\\" || e.key === "|") return { type: "toggle-sidebar" };

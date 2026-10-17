@@ -331,11 +331,13 @@ window.addEventListener(
     // takes them for itself.
     if (isFormOpen() || isMenuOpen()) return;
     const action = actionOf(e);
-    // Over the palette only its own shortcut works: it closes it.
+    // Over the palette only its own shortcuts work: the one of the tab it
+    // shows closes it, the other goes to the other tab.
     if (palette.isOpen) {
       if (action?.type === "palette") {
         e.preventDefault();
-        palette.close();
+        if (action.tab === palette.shownTab) palette.close();
+        else palette.open(action.tab);
       }
       return;
     }
@@ -362,7 +364,7 @@ window.addEventListener(
         setCollapsed(!isCollapsed());
         break;
       case "palette":
-        palette.open();
+        palette.open(action.tab);
         break;
     }
   },

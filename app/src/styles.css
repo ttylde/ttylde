@@ -1401,7 +1401,7 @@ body.no-space #space-dot .dot {
   background: none;
 }
 
-/* The palette, Cmd+K: over the window, the rest dimmed behind. */
+/* The palette, Cmd+P: over the window, the rest dimmed behind. */
 .palette-backdrop {
   position: fixed;
   inset: 0;

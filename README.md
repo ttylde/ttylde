@@ -26,6 +26,8 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 | `Ctrl+1` … `Ctrl+9` | Go to a space, reopening it if it is closed |
 | `Ctrl+Tab`, `Ctrl+Shift+Tab` | Next and previous open space |
 | `Cmd+\` | Collapse or expand the sidebar |
+| `Cmd+P` | Palette: the commands run before, searched by typing |
+| `Cmd+Shift+P` | Palette on its actions |
 | `Shift+Enter` | New line without sending, in the programs that support it |
 
 ## Configuration
