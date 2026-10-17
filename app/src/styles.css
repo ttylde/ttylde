@@ -1573,7 +1573,6 @@ body.no-space #space-dot .dot {
   text-overflow: ellipsis;
 }
 
-.palette-runs,
 .palette-where,
 .palette-time,
 .palette-hint,
@@ -1582,21 +1581,6 @@ body.no-space #space-dot .dot {
   color: var(--muted);
   font: 10.5px var(--ui);
   white-space: nowrap;
-}
-
-.palette-branch {
-  flex: none;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(36, 102, 255, 0.12);
-  color: #1f52d6;
-  font: 10.5px var(--ui);
-  white-space: nowrap;
-}
-
-.palette-branch.trunk {
-  background: rgba(21, 33, 28, 0.05);
-  color: var(--muted);
 }
 
 .palette-time,

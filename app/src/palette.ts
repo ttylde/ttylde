@@ -52,9 +52,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "actions", label: "Actions" },
 ];
 
-/** Branches that are the trunk of a repository: their chip stays neutral. */
-const TRUNKS = new Set(["main", "master", "develop"]);
-
 /**
  * The palette (`Cmd+K`): the commands run before, from the history, and the
  * actions of the app, searched by typing. Recent lists each command once,
@@ -363,19 +360,14 @@ export class Palette {
   }
 
   private commandRow(command: HistoryCommand): void {
-    const { last, runs } = command;
+    const { last } = command;
     const row = this.row({ kind: "command", command }, "palette-row palette-command-row");
     const bad = failed(last);
     const mark = element("span", `palette-mark ${bad ? "failed" : "ok"}`, bad ? "✕" : "✓");
     mark.title = bad ? `exited with ${last.exit}` : "done";
     const text = element("span", "palette-command", last.command);
+    // How many runs and the branch are kept, not shown: the row stays short.
     row.append(mark, text);
-    if (runs > 1) row.append(element("span", "palette-runs", `×${runs}`));
-    if (last.branch) {
-      const branch = element("span", "palette-branch", last.branch);
-      branch.classList.toggle("trunk", TRUNKS.has(last.branch));
-      row.append(branch);
-    }
     row.append(element("span", "palette-where", this.options.whereOf(last.cwd)));
     row.append(element("span", "palette-time", timeOf(last.ended)));
     const remove = document.createElement("button");
