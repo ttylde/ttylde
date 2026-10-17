@@ -368,8 +368,13 @@ export class Palette {
     const text = element("span", "palette-command", last.command);
     // How many runs and the branch are kept, not shown: the row stays short.
     row.append(mark, text);
-    row.append(element("span", "palette-where", this.options.whereOf(last.cwd)));
-    row.append(element("span", "palette-time", timeOf(last.ended)));
+    // Where and when, together at the right end.
+    const where = this.options.whereOf(last.cwd);
+    const when = element("span", "palette-when");
+    if (where)
+      when.append(element("span", "palette-where", where), element("span", "palette-dot", "·"));
+    when.append(element("span", "palette-time", timeOf(last.ended)));
+    row.append(when);
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "palette-forget";

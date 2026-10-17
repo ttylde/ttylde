@@ -1583,12 +1583,24 @@ body.no-space #space-dot .dot {
   white-space: nowrap;
 }
 
-.palette-time,
+.palette-when,
 .palette-hint,
 .palette-value,
 .palette-swatches,
 .palette-segments {
   margin-left: auto;
+}
+
+.palette-when {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.palette-dot {
+  color: #b8c2bd;
+  font: 11px var(--ui);
 }
 
 .palette-time {
