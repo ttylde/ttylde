@@ -169,6 +169,17 @@ export class Tabs {
     return place === undefined ? null : place;
   }
 
+  /** What the tab open in `cwd` is called, if one is: the first found. */
+  nameIn(cwd: string): string | null {
+    const entry = this.entries.find(({ tab }) => tab.cwd === cwd);
+    return entry ? titleOf(entry.tab) : null;
+  }
+
+  /** The tab shown, the one the keyboard writes to; `null` with none. */
+  activeTab(): Tab | null {
+    return this.active;
+  }
+
   /** How many tabs are open without a space. */
   looseCount(): number {
     return this.tabsOf(null).length;

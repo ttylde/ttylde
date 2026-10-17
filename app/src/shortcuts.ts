@@ -8,7 +8,8 @@ export type Action =
   | { type: "select-space"; index: number }
   /** `step` is 1 for the next space, -1 for the one before. */
   | { type: "step-space"; step: number }
-  | { type: "toggle-sidebar" };
+  | { type: "toggle-sidebar" }
+  | { type: "palette" };
 
 /** The parts of a `KeyboardEvent` a shortcut depends on. */
 export type KeyStroke = Pick<
@@ -20,6 +21,9 @@ const IS_MAC = typeof navigator !== "undefined" && navigator.userAgent.includes(
 
 /** How the shortcut for a new tab is written on this platform. */
 export const NEW_TAB_HINT = IS_MAC ? "⌘T" : "Ctrl+Shift+T";
+
+/** How the shortcut of the palette is written on this platform. */
+export const PALETTE_HINT = IS_MAC ? "⌘K" : "Ctrl+Shift+K";
 
 function hasAppModifier(e: KeyStroke, mac: boolean): boolean {
   if (e.altKey) return false;
@@ -37,6 +41,7 @@ export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
   }
   if (!hasAppModifier(e, mac)) return null;
   if (e.key.toLowerCase() === "t") return { type: "new-tab" };
+  if (e.key.toLowerCase() === "k") return { type: "palette" };
   // `key`, not `code`: the backslash sits on different keys across layouts.
   // With Shift held it is the bar.
   if (e.key === "\\" || e.key === "|") return { type: "toggle-sidebar" };

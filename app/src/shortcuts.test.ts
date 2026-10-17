@@ -21,6 +21,18 @@ describe("actionOf", () => {
     expect(action).toEqual({ type: "new-tab" });
   });
 
+  test("Cmd+K opens the palette on macOS, Ctrl+Shift+K elsewhere", () => {
+    expect(actionOf(stroke({ key: "k", code: "KeyK", metaKey: true }), true)).toEqual({
+      type: "palette",
+    });
+    const mods = { ctrlKey: true, shiftKey: true };
+    expect(actionOf(stroke({ key: "K", code: "KeyK", ...mods }), false)).toEqual({
+      type: "palette",
+    });
+    // Ctrl+K kills to the end of the line in the shell.
+    expect(actionOf(stroke({ key: "k", code: "KeyK", ctrlKey: true }), true)).toBeNull();
+  });
+
   // Digits select tabs by position, counting from one.
   test("Cmd+1..9 select a tab on macOS", () => {
     const first = actionOf(stroke({ key: "1", code: "Digit1", metaKey: true }), true);
