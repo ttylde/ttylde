@@ -15,6 +15,10 @@ use std::{
     sync::LazyLock,
 };
 
+use nucleo_matcher::{
+    pattern::{CaseMatching, Normalization, Pattern},
+    Config, Matcher, Utf32Str,
+};
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
@@ -27,7 +31,11 @@ use crate::{
 };
 
 /// The version of the schema below, kept in `user_version`.
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
+
+/// Version 2: one row per command, for the palette.
+const COMMANDS_INDEX: &str =
+    "CREATE INDEX IF NOT EXISTS entries_command ON entries (command, space);";
 
 const SCHEMA: &str = "
 CREATE TABLE entries (
@@ -86,6 +94,13 @@ pub struct Record {
     pub started: u64,
     pub ended: u64,
     pub exit: Option<i32>,
+}
+
+/// A command as the palette lists it: its last run, and how many there were.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Command {
+    pub last: Entry,
+    pub runs: u32,
 }
 
 /// What to look for. Every field set narrows the search; the newest come
@@ -322,18 +337,7 @@ impl History {
 
         let mut statement = self.connection.prepare(&sql)?;
         let entries = statement
-            .query_map(rusqlite::params_from_iter(values), |row| {
-                Ok(Entry {
-                    id: row.get(0)?,
-                    command: row.get(1)?,
-                    cwd: row.get(2)?,
-                    space: row.get(3)?,
-                    branch: row.get(4)?,
-                    started: u64::try_from(row.get::<_, i64>(5)?).unwrap_or(0),
-                    ended: u64::try_from(row.get::<_, i64>(6)?).unwrap_or(0),
-                    exit: row.get(7)?,
-                })
-            })?
+            .query_map(rusqlite::params_from_iter(values), read_entry)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(entries)
     }
@@ -350,6 +354,109 @@ impl History {
         self.connection.execute("DELETE FROM entries", [])?;
         Ok(())
     }
+
+    /// The commands run in `space` (`None`: in any), one each, the one run
+    /// last first. With `text`, those it matches as a fuzzy search does,
+    /// the best match first: `gco` finds `git checkout`.
+    pub fn commands(&self, space: Option<u32>, text: &str, limit: usize) -> Result<Vec<Command>> {
+        // The last run of each, newest first: the ids grow with time.
+        let mut statement = self.connection.prepare(
+            "SELECT command, MAX(id), COUNT(*) FROM entries
+             WHERE ?1 IS NULL OR space = ?1
+             GROUP BY command ORDER BY MAX(id) DESC",
+        )?;
+        let rows = statement
+            .query_map([space], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, u32>(2)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let text = text.trim();
+        let chosen: Vec<(i64, u32)> = if text.is_empty() {
+            rows.into_iter()
+                .take(limit)
+                .map(|(_, id, runs)| (id, runs))
+                .collect()
+        } else {
+            let pattern = Pattern::parse(text, CaseMatching::Smart, Normalization::Smart);
+            let mut matcher = Matcher::new(Config::DEFAULT);
+            let mut buffer = Vec::new();
+            let mut scored: Vec<(u32, i64, u32)> = rows
+                .into_iter()
+                .filter_map(|(command, id, runs)| {
+                    let haystack = Utf32Str::new(&command, &mut buffer);
+                    let score = pattern.score(haystack, &mut matcher)?;
+                    Some((score, id, runs))
+                })
+                .collect();
+            // The best match first; among equals, the one run last.
+            scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+            scored
+                .into_iter()
+                .take(limit)
+                .map(|(_, id, runs)| (id, runs))
+                .collect()
+        };
+
+        let mut entry = self.connection.prepare(
+            "SELECT id, command, cwd, space, branch, started, ended, exit FROM entries WHERE id = ?1",
+        )?;
+        chosen
+            .into_iter()
+            .map(|(id, runs)| {
+                let last = entry.query_row([id], read_entry)?;
+                Ok(Command { last, runs })
+            })
+            .collect()
+    }
+
+    /// Lets every run of `command` in `space` (`None`: in any) go. Returns
+    /// how many went.
+    pub fn forget(&self, command: &str, space: Option<u32>) -> Result<usize> {
+        let gone = self.connection.execute(
+            "DELETE FROM entries WHERE command = ?1 AND (?2 IS NULL OR space = ?2)",
+            params![command, space],
+        )?;
+        Ok(gone)
+    }
+
+    /// Lets every entry of `space` (`None`: of any) go. Returns how many
+    /// commands went, as the palette counts them: one each.
+    pub fn clear_in(&self, space: Option<u32>) -> Result<usize> {
+        let commands = self.count(space)?;
+        self.connection.execute(
+            "DELETE FROM entries WHERE ?1 IS NULL OR space = ?1",
+            [space],
+        )?;
+        Ok(commands)
+    }
+
+    /// How many commands `space` (`None`: any) has, one each.
+    pub fn count(&self, space: Option<u32>) -> Result<usize> {
+        let count: i64 = self.connection.query_row(
+            "SELECT COUNT(DISTINCT command) FROM entries WHERE ?1 IS NULL OR space = ?1",
+            [space],
+            |row| row.get(0),
+        )?;
+        Ok(usize::try_from(count).unwrap_or(0))
+    }
+}
+
+fn read_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<Entry> {
+    Ok(Entry {
+        id: row.get(0)?,
+        command: row.get(1)?,
+        cwd: row.get(2)?,
+        space: row.get(3)?,
+        branch: row.get(4)?,
+        started: u64::try_from(row.get::<_, i64>(5)?).unwrap_or(0),
+        ended: u64::try_from(row.get::<_, i64>(6)?).unwrap_or(0),
+        exit: row.get(7)?,
+    })
 }
 
 /// Follows the events of one session and turns each command that ends into
@@ -416,6 +523,9 @@ fn migrate(connection: &Connection) -> Result<()> {
     let version: i32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version < 1 {
         connection.execute_batch(SCHEMA)?;
+    }
+    if version < 2 {
+        connection.execute_batch(COMMANDS_INDEX)?;
     }
     connection.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
@@ -809,6 +919,118 @@ mod tests {
             ["failed"]
         );
         assert_eq!(search(all(1)), ["failed"]);
+    }
+
+    fn run(history: &History, command: &str, ended: u64, space: Option<u32>, exit: i32) {
+        history
+            .record(&Record {
+                space,
+                exit: Some(exit),
+                ..record(command, ended)
+            })
+            .unwrap();
+    }
+
+    fn listed(commands: &[Command]) -> Vec<(&str, u32)> {
+        commands
+            .iter()
+            .map(|c| (c.last.command.as_str(), c.runs))
+            .collect()
+    }
+
+    // `cargo test` thirty times is one row: its last run.
+    #[test]
+    fn commands_come_once_with_their_last_run() {
+        let history = open("commands", HistoryConfig::default());
+        run(&history, "cargo test", 10, Some(1), 0);
+        run(&history, "ls", 20, Some(1), 0);
+        run(&history, "cargo test", 30, Some(1), 101);
+
+        let commands = history.commands(None, "", 10).unwrap();
+        assert_eq!(listed(&commands), [("cargo test", 2), ("ls", 1)]);
+        assert_eq!(
+            (commands[0].last.ended, commands[0].last.exit),
+            (30, Some(101))
+        );
+        assert_eq!(history.commands(None, "", 1).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn commands_are_per_space_or_all() {
+        let history = open("commands-space", HistoryConfig::default());
+        run(&history, "make", 10, Some(1), 0);
+        run(&history, "make", 20, Some(2), 0);
+        run(&history, "npm ci", 30, Some(2), 0);
+        run(&history, "top", 40, None, 0);
+
+        assert_eq!(
+            listed(&history.commands(Some(1), "", 10).unwrap()),
+            [("make", 1)]
+        );
+        assert_eq!(
+            listed(&history.commands(Some(2), "", 10).unwrap()),
+            [("npm ci", 1), ("make", 1)]
+        );
+        assert_eq!(
+            listed(&history.commands(None, "", 10).unwrap()),
+            [("top", 1), ("npm ci", 1), ("make", 2)]
+        );
+        assert_eq!(history.count(Some(2)).unwrap(), 2);
+        assert_eq!(history.count(None).unwrap(), 3);
+    }
+
+    // As fzf does: the letters in order, not side by side.
+    #[test]
+    fn the_search_is_fuzzy_and_ranks_the_best_first() {
+        let history = open("fuzzy", HistoryConfig::default());
+        run(&history, "git checkout main", 10, None, 0);
+        run(&history, "go test ./...", 20, None, 0);
+        run(&history, "cargo clippy", 30, None, 0);
+
+        let found = history.commands(None, "gco", 10).unwrap();
+        assert_eq!(found[0].last.command, "git checkout main");
+        assert!(listed(&found).iter().all(|(c, _)| *c != "cargo clippy"));
+        assert!(history.commands(None, "zzz", 10).unwrap().is_empty());
+        // Lower case finds both cases; upper case only itself.
+        run(&history, "echo Hello", 40, None, 0);
+        assert_eq!(
+            listed(&history.commands(None, "hello", 10).unwrap()),
+            [("echo Hello", 1)]
+        );
+        assert!(history.commands(None, "HELLO", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_command_is_forgotten_in_its_space_only() {
+        let history = open("forget", HistoryConfig::default());
+        run(&history, "make", 10, Some(1), 0);
+        run(&history, "make", 20, Some(1), 0);
+        run(&history, "make", 30, Some(2), 0);
+
+        assert_eq!(history.forget("make", Some(1)).unwrap(), 2);
+        assert_eq!(
+            listed(&history.commands(None, "", 10).unwrap()),
+            [("make", 1)]
+        );
+        assert_eq!(history.forget("make", None).unwrap(), 1);
+        assert!(history.commands(None, "", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_space_is_cleared_alone() {
+        let history = open("clear-space", HistoryConfig::default());
+        run(&history, "make", 10, Some(1), 0);
+        run(&history, "make", 20, Some(1), 0);
+        run(&history, "ls", 30, Some(1), 0);
+        run(&history, "top", 40, Some(2), 0);
+
+        assert_eq!(history.clear_in(Some(1)).unwrap(), 2);
+        assert_eq!(
+            listed(&history.commands(None, "", 10).unwrap()),
+            [("top", 1)]
+        );
+        assert_eq!(history.clear_in(None).unwrap(), 1);
+        assert_eq!(history.count(None).unwrap(), 0);
     }
 
     #[test]

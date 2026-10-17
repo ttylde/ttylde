@@ -13,6 +13,7 @@ portable-pty = "0.9"
 alacritty_terminal = "0.26"
 serde = { version = "1", features = ["derive"] }
 toml = "1"
+nucleo-matcher = "0.3"
 regex = "1"
 rusqlite = { version = "0.40", features = ["bundled"] }
 

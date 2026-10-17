@@ -15,7 +15,7 @@ use tauri::ipc::Channel;
 use tauri::State;
 use ttylde_core::config::{Config, Font};
 use ttylde_core::emulator::{SelectionKind, SelectionSide};
-use ttylde_core::history::{History, Recorder};
+use ttylde_core::history::{Command, History, Recorder};
 use ttylde_core::input::{Key, Mods, MouseEvent};
 use ttylde_core::session::{Session, SessionEvent};
 use ttylde_core::shell;
@@ -233,6 +233,63 @@ pub fn session_set_space(state: State<'_, Sessions>, id: u32, space: Option<u32>
     if let Some(recorder) = state.recorders.lock().unwrap().get(&id) {
         recorder.lock().unwrap().set_space(space);
     }
+}
+
+/// The commands of the history, one each, for the palette: those of
+/// `space` (`None`: of every space), matched against `text` as a fuzzy
+/// search does, or the newest first with no text. None with the history off.
+#[tauri::command]
+pub fn history_commands(
+    state: State<'_, Sessions>,
+    space: Option<u32>,
+    text: String,
+    limit: usize,
+) -> Result<Vec<Command>, String> {
+    let Some(history) = &state.history else {
+        return Ok(Vec::new());
+    };
+    let history = history.lock().unwrap();
+    history
+        .commands(space, &text, limit)
+        .map_err(|e| e.to_string())
+}
+
+/// Lets every run of `command` in `space` go from the history.
+#[tauri::command]
+pub fn history_forget(
+    state: State<'_, Sessions>,
+    command: String,
+    space: Option<u32>,
+) -> Result<(), String> {
+    let Some(history) = &state.history else {
+        return Ok(());
+    };
+    let history = history.lock().unwrap();
+    history
+        .forget(&command, space)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Empties the history of `space` (`None`: all of it). Returns how many
+/// commands went.
+#[tauri::command]
+pub fn history_clear(state: State<'_, Sessions>, space: Option<u32>) -> Result<usize, String> {
+    let Some(history) = &state.history else {
+        return Ok(0);
+    };
+    let history = history.lock().unwrap();
+    history.clear_in(space).map_err(|e| e.to_string())
+}
+
+/// How many commands the history of `space` has, one each.
+#[tauri::command]
+pub fn history_count(state: State<'_, Sessions>, space: Option<u32>) -> Result<usize, String> {
+    let Some(history) = &state.history else {
+        return Ok(0);
+    };
+    let history = history.lock().unwrap();
+    history.count(space).map_err(|e| e.to_string())
 }
 
 // Milliseconds since 1970, as the history keeps time.
