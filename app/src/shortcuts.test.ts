@@ -21,6 +21,31 @@ describe("actionOf", () => {
     expect(action).toEqual({ type: "new-tab" });
   });
 
+  // As in VS Code: Cmd+P on the commands, Cmd+Shift+P on the actions.
+  test("Cmd+P opens the palette, Cmd+Shift+P on its actions", () => {
+    expect(actionOf(stroke({ key: "p", code: "KeyP", metaKey: true }), true)).toEqual({
+      type: "palette",
+      tab: "recent",
+    });
+    expect(
+      actionOf(stroke({ key: "P", code: "KeyP", metaKey: true, shiftKey: true }), true),
+    ).toEqual({ type: "palette", tab: "actions" });
+    // Off macOS the modifier of the app is Ctrl+Shift: P is the actions, as
+    // in VS Code, R the commands, as Ctrl+R in the shell.
+    const mods = { ctrlKey: true, shiftKey: true };
+    expect(actionOf(stroke({ key: "P", code: "KeyP", ...mods }), false)).toEqual({
+      type: "palette",
+      tab: "actions",
+    });
+    expect(actionOf(stroke({ key: "R", code: "KeyR", ...mods }), false)).toEqual({
+      type: "palette",
+      tab: "recent",
+    });
+    expect(actionOf(stroke({ key: "r", code: "KeyR", metaKey: true }), true)).toBeNull();
+    // Ctrl+P is the command before in the shell.
+    expect(actionOf(stroke({ key: "p", code: "KeyP", ctrlKey: true }), true)).toBeNull();
+  });
+
   // Digits select tabs by position, counting from one.
   test("Cmd+1..9 select a tab on macOS", () => {
     const first = actionOf(stroke({ key: "1", code: "Digit1", metaKey: true }), true);

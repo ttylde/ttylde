@@ -5,15 +5,18 @@ import { isFormOpen } from "./form";
 import { Header } from "./header";
 import { PLUS_ICON, SIDEBAR_ICON } from "./icons";
 import { attachKeyboard } from "./input";
+import { folderName } from "./label";
 import { Launcher } from "./launcher";
 import { isMenuOpen, openMenu } from "./menu";
 import { OfferBanner } from "./offer";
+import { Palette } from "./palette";
 import { fontStack } from "./renderer";
-import { actionOf, NEW_TAB_HINT } from "./shortcuts";
+import { actionOf, NEW_TAB_HINT, PALETTE_HINT } from "./shortcuts";
 import { ago, tabCount } from "./space";
 import { openSpaceSettings } from "./space-settings";
-import { defaultTitle, type Tab, titleOf } from "./tab";
+import { defaultTitle, type Tab, titleOf, typeCommand } from "./tab";
 import { Tabs } from "./tabs";
+import { toast } from "./toast";
 import type { Font, SavedState } from "./types";
 
 // The elements of index.html the app is built on: one missing is a bug in
@@ -58,6 +61,8 @@ function setCollapsed(collapsed: boolean): void {
 toggle.innerHTML = SIDEBAR_ICON;
 element("#new-tab .plus").innerHTML = PLUS_ICON;
 element("#new-tab .hint").textContent = NEW_TAB_HINT;
+const paletteButton = element("#open-palette");
+paletteButton.textContent = PALETTE_HINT;
 try {
   showCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
 } catch {
@@ -186,6 +191,32 @@ const offer = new OfferBanner({
   onDismiss: () => tabs.dismissOffer(),
 });
 
+// Commands run before, and the actions of the app.
+const palette = new Palette({
+  space: () => tabs.spaceList().find((info) => info.current)?.space ?? null,
+  spaceTabs: () => tabs.spaceList().find((info) => info.current)?.tabs ?? 0,
+  closedSpaces: () => tabs.closedSpaces(),
+  whereOf: (cwd) => (cwd === null ? "" : (tabs.nameIn(cwd) ?? folderName(cwd))),
+  collapsed: isCollapsed,
+  // In the tab shown; with none, a new one opens for it, as from the launcher.
+  run: (command) => {
+    const tab = tabs.activeTab();
+    if (tab) typeCommand(tab, command);
+    else void tabs.open().then((opened) => opened && typeCommand(opened, command));
+  },
+  newTab: () => void tabs.open(),
+  closeSpace: () => tabs.closeSpace(),
+  toggleSidebar: () => setCollapsed(!isCollapsed()),
+  reopen: (index) => void tabs.selectSpace(index),
+  editSpace: (changes) => tabs.editSpace(changes),
+  deleteSpace: () => tabs.deleteSpace(),
+  toast,
+  onClose: () => {
+    if (tabs.activeTab()) keyboard.focus();
+    else launcher.focus();
+  },
+});
+
 // Keys that are only modifiers, pressed on their own on the way to another.
 const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
 
@@ -281,6 +312,7 @@ function openSpaceMenu(anchor?: HTMLElement): void {
 // Clicks in the sidebar must not take the focus away from the keyboard.
 sidebar.addEventListener("mousedown", (e) => e.preventDefault());
 newTab.addEventListener("click", () => void tabs.open());
+paletteButton.addEventListener("click", () => palette.open());
 spaceName.addEventListener("click", () => openSpaceMenu());
 spaceDot.addEventListener("click", () => openSpaceMenu());
 closeSpace.addEventListener("click", () => tabs.closeSpace());
@@ -299,6 +331,16 @@ window.addEventListener(
     // takes them for itself.
     if (isFormOpen() || isMenuOpen()) return;
     const action = actionOf(e);
+    // Over the palette only its own shortcuts work: the one of the tab it
+    // shows closes it, the other goes to the other tab.
+    if (palette.isOpen) {
+      if (action?.type === "palette") {
+        e.preventDefault();
+        if (action.tab === palette.shownTab) palette.close();
+        else palette.open(action.tab);
+      }
+      return;
+    }
     if (!action) {
       answerOffer(e);
       return;
@@ -320,6 +362,9 @@ window.addEventListener(
         break;
       case "toggle-sidebar":
         setCollapsed(!isCollapsed());
+        break;
+      case "palette":
+        palette.open(action.tab);
         break;
     }
   },
