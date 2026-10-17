@@ -30,12 +30,18 @@ describe("actionOf", () => {
     expect(
       actionOf(stroke({ key: "P", code: "KeyP", metaKey: true, shiftKey: true }), true),
     ).toEqual({ type: "palette", tab: "actions" });
-    // Off macOS the modifier of the app is Ctrl+Shift.
+    // Off macOS the modifier of the app is Ctrl+Shift: P is the actions, as
+    // in VS Code, R the commands, as Ctrl+R in the shell.
     const mods = { ctrlKey: true, shiftKey: true };
     expect(actionOf(stroke({ key: "P", code: "KeyP", ...mods }), false)).toEqual({
       type: "palette",
+      tab: "actions",
+    });
+    expect(actionOf(stroke({ key: "R", code: "KeyR", ...mods }), false)).toEqual({
+      type: "palette",
       tab: "recent",
     });
+    expect(actionOf(stroke({ key: "r", code: "KeyR", metaKey: true }), true)).toBeNull();
     // Ctrl+P is the command before in the shell.
     expect(actionOf(stroke({ key: "p", code: "KeyP", ctrlKey: true }), true)).toBeNull();
   });
