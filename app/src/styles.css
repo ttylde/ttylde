@@ -1382,6 +1382,11 @@ body.empty #no-space {
   display: block;
 }
 
+/* The rail has no room for it: the dot of the space menu says enough. */
+body.collapsed.empty #no-space {
+  display: none;
+}
+
 body.empty #section,
 body.empty #new-tab,
 body.no-space #close-space,
