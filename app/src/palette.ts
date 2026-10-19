@@ -1,5 +1,5 @@
 import type { Favorite, FavoriteStore } from "./favorites";
-import { asked } from "./filters";
+import { type Asked, asked } from "./filters";
 import {
   byDay,
   clear,
@@ -80,9 +80,13 @@ export class Palette {
   private readonly tabs: HTMLElement;
   private readonly scopeButton: HTMLButtonElement;
   private readonly input: HTMLInputElement;
+  /** The filter applied to the actions, shown as a chip before the text. */
+  private readonly chip: HTMLElement;
   private readonly list: HTMLElement;
 
   private tab: Tab = "recent";
+  // The filter of the actions once applied: `@space`, or none.
+  private filter: string | null = null;
   private scope: Scope = "space";
   private found: HistoryCommand[] = [];
   private total = 0;
@@ -108,7 +112,9 @@ export class Palette {
     this.input = document.createElement("input");
     this.input.spellcheck = false;
     this.input.autocomplete = "off";
-    search.append(icon, this.input);
+    this.chip = element("span", "palette-chip");
+    this.chip.hidden = true;
+    search.append(icon, this.chip, this.input);
     this.list = element("div", "palette-list");
     this.panel.append(this.tabs, search, this.list);
     this.backdrop.hidden = true;
@@ -129,6 +135,11 @@ export class Palette {
     this.input.addEventListener("input", () => {
       this.selected = 0;
       this.confirming = null;
+      // `@space ` typed in full becomes the chip of the filter.
+      const typed = asked(this.input.value);
+      if (this.tab === "actions" && typed.kind === "filter" && /\s/.test(this.input.value)) {
+        this.applyFilter(typed.token, typed.text);
+      }
       void this.refresh();
     });
     this.input.addEventListener("keydown", (e) => this.key(e));
@@ -153,11 +164,12 @@ export class Palette {
     return this.tab;
   }
 
-  /** Opens on `tab`, with `text` typed: `@space ` from the space menu. */
-  open(tab: Tab = "recent", text = ""): void {
+  /** Opens on `tab`, with `filter` applied to the actions: `@space` from the space menu. */
+  open(tab: Tab = "recent", filter: string | null = null): void {
     this.tab = tab;
     this.scope = this.options.space() ? "space" : "all";
-    this.input.value = text;
+    this.input.value = "";
+    this.applyFilter(tab === "actions" ? filter : null, "");
     this.selected = 0;
     this.editing = null;
     this.confirming = null;
@@ -200,6 +212,19 @@ export class Palette {
   private key(e: KeyboardEvent): void {
     if (e.isComposing) return;
     const mod = e.metaKey || e.ctrlKey;
+    // Backspace with nothing left to delete takes the filter away.
+    if (
+      e.key === "Backspace" &&
+      this.filter &&
+      this.input.selectionStart === 0 &&
+      this.input.selectionEnd === 0
+    ) {
+      e.preventDefault();
+      this.applyFilter(null, this.input.value);
+      this.selected = 0;
+      this.draw();
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       if (!this.confirming) {
@@ -231,8 +256,28 @@ export class Palette {
     }
   }
 
+  // Applies `token` as the filter of the actions, with `text` left to type;
+  // `null` takes the filter away.
+  private applyFilter(token: string | null, text: string): void {
+    this.filter = token;
+    this.chip.hidden = token === null;
+    this.chip.textContent = token ?? "";
+    this.chip.title = token ? "Filter · Backspace to take it away" : "";
+    this.input.value = text;
+  }
+
+  // What the actions are asked for: the filter applied, or the text typed.
+  private query(): Asked {
+    if (this.filter) {
+      return { kind: "filter", token: this.filter, text: this.input.value.trim().toLowerCase() };
+    }
+    return asked(this.input.value);
+  }
+
   private switchTo(tab: Tab): void {
     this.tab = tab;
+    // A filter is of the actions only.
+    if (tab !== "actions") this.applyFilter(null, this.input.value);
     this.selected = 0;
     this.editing = null;
     this.confirming = null;
@@ -263,7 +308,7 @@ export class Palette {
         this.save(item.command, null);
         break;
       case "filter":
-        this.input.value = `${item.token} `;
+        this.applyFilter(item.token, "");
         this.selected = 0;
         this.draw();
         this.input.focus();
@@ -359,7 +404,7 @@ export class Palette {
     this.input.placeholder = {
       recent: "Search a command…",
       saved: "Filter saved commands…",
-      actions: "Search an action, or @space…",
+      actions: this.filter ? "Narrow the actions of this space…" : "Search an action, or @space…",
     }[this.tab];
     this.list.replaceChildren();
     this.items = [];
@@ -377,7 +422,7 @@ export class Palette {
 
   private emptyText(): string {
     if (this.tab === "actions") {
-      return asked(this.input.value).kind === "choosing"
+      return this.query().kind === "choosing"
         ? "No such filter: @space is the one there is."
         : "No action matches.";
     }
@@ -556,7 +601,7 @@ export class Palette {
         run: () => this.options.reopen(index),
       })),
     ];
-    const query = asked(this.input.value);
+    const query = this.query();
     if (query.kind === "choosing") {
       for (const filter of query.filters) {
         const row = this.row({ kind: "filter", token: filter.token }, "palette-row palette-action");

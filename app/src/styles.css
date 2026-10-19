@@ -1427,6 +1427,20 @@ body.no-space #space-dot .dot {
   color: var(--muted);
 }
 
+/* A filter applied to the actions, before the text that narrows it. */
+.palette-chip {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: rgba(36, 102, 255, 0.12);
+  color: #1f52d6;
+  font: 600 12.5px var(--mono);
+}
+
+.palette-chip[hidden] {
+  display: none;
+}
+
 .palette-search input {
   flex: 1;
   min-width: 0;
