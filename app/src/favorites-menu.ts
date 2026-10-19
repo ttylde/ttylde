@@ -1,14 +1,13 @@
 import { type Favorite, type FavoriteStore, menuOf } from "./favorites";
 import { GRIP_ICON, PLAY_ICON, PLUS_ICON } from "./icons";
-import { folderName } from "./label";
 import { dropIndex } from "./reorder";
 
 export type FavoritesMenuOptions = {
   /** What it opens under, its right edge on the one of the menu. */
   anchor: HTMLElement;
   store: FavoriteStore;
-  /** The folder of the tab shown. */
-  cwd: string | null;
+  /** The space of the tab shown; `null`: none, or a pinned tab. */
+  space: { id: number; name: string } | null;
   /** The last command of the tab, offered to save if it is not saved. */
   lastCommand: string | null;
   run(favorite: Favorite): void;
@@ -31,7 +30,7 @@ export function closeFavoritesMenu(): void {
 }
 
 /**
- * The menu of the saved commands of the folder of the tab: first those in
+ * The menu of the saved commands of the space of the tab: first those in
  * the header, then, under a line, those only here. A row dragged by its
  * handle above the line goes in the header, below leaves it; the order is
  * the order of the chips.
@@ -73,15 +72,16 @@ export function refreshFavoritesMenu(): void {
 function draw(): void {
   if (!current) return;
   const { options, root } = current;
-  const { store, cwd } = options;
+  const { store } = options;
+  const space = options.space?.id ?? null;
   root.replaceChildren();
 
   const heading = element("div", "favorites-heading");
   heading.append(element("span", "", "IN THE HEADER"));
-  if (cwd) heading.append(element("span", "favorites-folder", folderName(cwd)));
+  heading.append(element("span", "favorites-folder", options.space?.name ?? "everywhere"));
   root.append(heading);
 
-  const menu = menuOf(store.list, cwd);
+  const menu = menuOf(store.list, space);
   const pinned = menu.filter((f) => f.pinned).length;
   // The rows as `rearrange` counts them: the line between pinned and not is one.
   const rows: HTMLElement[] = [];
@@ -102,14 +102,14 @@ function draw(): void {
       element(
         "div",
         "favorites-empty",
-        "No saved command in this folder. Save one from the recents, or with the bookmark in the palette.",
+        "No saved command here yet. Save one from the recents, or with the bookmark in the palette.",
       ),
     );
   }
 
   root.append(element("div", "favorites-rule"));
   const last = options.lastCommand;
-  if (last && !store.has(last, cwd)) {
+  if (last && !store.has(last, space)) {
     const save = element("div", "favorites-save");
     const plus = element("span", "favorites-plus");
     plus.innerHTML = PLUS_ICON;
@@ -146,7 +146,7 @@ function favoriteRow(favorite: Favorite): HTMLElement {
   const { options } = current;
   const row = element("div", "favorites-row");
   row.classList.toggle("pinned", favorite.pinned);
-  row.title = favorite.folder ? favorite.command : `${favorite.command} · every folder`;
+  row.title = favorite.space === null ? `${favorite.command} · everywhere` : favorite.command;
   const grip = element("span", "favorites-grip");
   grip.innerHTML = GRIP_ICON;
   grip.title = "Drag to reorder · above the line = in the header";
@@ -180,7 +180,8 @@ function favoriteRow(favorite: Favorite): HTMLElement {
 function press(rows: HTMLElement[], from: number, e: PointerEvent): void {
   if (e.button !== 0 || !current) return;
   e.preventDefault();
-  const { store, cwd } = current.options;
+  const { store } = current.options;
+  const space = current.options.space?.id ?? null;
   const row = rows[from];
   const centers = rows.map((r) => {
     const box = r.getBoundingClientRect();
@@ -213,7 +214,7 @@ function press(rows: HTMLElement[], from: number, e: PointerEvent): void {
       r.classList.remove("dragging", "drop-above", "drop-below");
       r.style.transform = "";
     }
-    if (dragging) store.move(cwd, from, to);
+    if (dragging) store.move(space, from, to);
   };
   grip.setPointerCapture(e.pointerId);
   grip.addEventListener("pointermove", move);

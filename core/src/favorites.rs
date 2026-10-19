@@ -1,6 +1,6 @@
-//! The saved commands: a name and a command, for one folder or for every
-//! folder. The header shows those of the folder of the tab, the palette
-//! lists them all.
+//! The saved commands: a name and a command, for one space or for every
+//! one. The header shows those of the space of the tab and those for every
+//! space; the palette lists them.
 //!
 //! The app writes this file and reads it back, in the order they are shown;
 //! it is short and readable, to carry to another machine. It lives next to
@@ -30,9 +30,10 @@ pub struct Favorites {
 pub struct Favorite {
     pub name: String,
     pub command: String,
-    /// The folder it is for; `None`: every folder.
+    /// The id of the space it is for; `None`: every space, and the tabs
+    /// that are in none.
     #[serde(default)]
-    pub folder: Option<String>,
+    pub space: Option<u32>,
     /// Shown as a chip in the header, not only in the menu.
     #[serde(default)]
     pub pinned: bool,
@@ -77,13 +78,13 @@ mod tests {
                 Favorite {
                     name: "Dev".into(),
                     command: "pnpm dev".into(),
-                    folder: Some("/Users/me/api".into()),
+                    space: Some(3),
                     pinned: true,
                 },
                 Favorite {
                     name: "Pull".into(),
                     command: "git pull --rebase".into(),
-                    folder: None,
+                    space: None,
                     pinned: false,
                 },
             ],
@@ -112,7 +113,7 @@ mod tests {
 
     // Written by hand: the fields left out take their default.
     #[test]
-    fn a_short_entry_is_for_every_folder_and_not_pinned() {
+    fn a_short_entry_is_for_every_space_and_not_pinned() {
         let path = temp_path("short");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(
@@ -121,7 +122,7 @@ mod tests {
         )
         .unwrap();
         let favorite = &load(&path).unwrap().favorites[0];
-        assert_eq!((favorite.folder.clone(), favorite.pinned), (None, false));
+        assert_eq!((favorite.space, favorite.pinned), (None, false));
     }
 
     #[cfg(unix)]

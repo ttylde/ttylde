@@ -20,6 +20,7 @@ import { Palette } from "./palette";
 import { fontStack } from "./renderer";
 import { isSaveCommandOpen, openSaveCommand } from "./save-command";
 import { actionOf, NEW_TAB_HINT, PALETTE_HINT } from "./shortcuts";
+import type { Space } from "./space";
 import { ago, tabCount } from "./space";
 import { openSpaceSettings } from "./space-settings";
 import { defaultTitle, type Tab, titleOf, typeCommand } from "./tab";
@@ -121,10 +122,10 @@ const header = new Header({
     openFavoritesMenu({
       anchor,
       store: favorites,
-      cwd: shown?.cwd ?? null,
+      space: shownSpace(),
       lastCommand: shown?.command ?? null,
       run: (favorite: Favorite) => runCommand(favorite.command),
-      save: (command) => saveCommand(command, shown?.cwd ?? null),
+      save: (command) => saveCommand(command, null),
       onClose: () => {
         header.setFavoritesOpen(false);
         if (!isSaveCommandOpen()) keyboard.focus();
@@ -142,7 +143,7 @@ function showHeader(): void {
       git: shown.git,
       cwd: shown.cwd,
       status: shown.status,
-      favorites: menuOf(favorites.list, shown.cwd).filter((f) => f.pinned),
+      favorites: menuOf(favorites.list, shownSpace()?.id ?? null).filter((f) => f.pinned),
       running:
         shown.status.status === "running" || shown.status.status === "active"
           ? shown.command
@@ -159,11 +160,22 @@ function runCommand(command: string): void {
   else void tabs.open().then((opened) => opened && typeCommand(opened, command));
 }
 
-// The dialog that saves `command`, for `folder` or every folder.
-function saveCommand(command: string, folder: string | null): void {
+// The space of the tab shown; `null` for a pinned tab or one in no space.
+function shownSpace(): Space | null {
+  const place = tabs.activePlace();
+  return place === null || place === "pinned" ? null : place;
+}
+
+// The dialog that saves `command`, for the space `id` (`null`: the one of
+// the tab shown) or everywhere.
+function saveCommand(command: string, id: number | null): void {
+  const space =
+    id === null
+      ? shownSpace()
+      : (tabs.spaceList().find((info) => info.space.id === id)?.space ?? null);
   openSaveCommand({
     command,
-    folder: folder ?? shown?.cwd ?? null,
+    space,
     onSave: (favorite) => {
       favorites.add(favorite);
       toast(`Saved · ${favorite.name}`);
@@ -252,6 +264,13 @@ const offer = new OfferBanner({
   onDismiss: () => tabs.dismissOffer(),
 });
 
+// Deletes the space shown, and the commands saved for it.
+function deleteSpace(): void {
+  const space = tabs.spaceList().find((info) => info.current)?.space;
+  tabs.deleteSpace();
+  if (space) favorites.removeSpace(space.id);
+}
+
 // Commands run before, and the actions of the app.
 const palette = new Palette({
   space: () => tabs.spaceList().find((info) => info.current)?.space ?? null,
@@ -261,14 +280,14 @@ const palette = new Palette({
   collapsed: isCollapsed,
   run: runCommand,
   favorites,
-  spaceFolders: () => tabs.foldersOfSpace(),
+  spaceName: (id) => tabs.spaceList().find((info) => info.space.id === id)?.space.name ?? null,
   saveCommand,
   newTab: () => void tabs.open(),
   closeSpace: () => tabs.closeSpace(),
   toggleSidebar: () => setCollapsed(!isCollapsed()),
   reopen: (index) => void tabs.selectSpace(index),
   editSpace: (changes) => tabs.editSpace(changes),
-  deleteSpace: () => tabs.deleteSpace(),
+  deleteSpace,
   toast,
   onClose: () => {
     if (tabs.activeTab()) keyboard.focus();
@@ -311,7 +330,7 @@ function openSettings(): void {
     left,
     top,
     onSave: (changes) => tabs.editSpace(changes),
-    onDelete: () => tabs.deleteSpace(),
+    onDelete: deleteSpace,
     onClose: () => keyboard.focus(),
   });
 }

@@ -1,12 +1,11 @@
 import { type Favorite, guessName } from "./favorites";
 import { BOOKMARK_ICON } from "./icons";
-import { folderName } from "./label";
 
 export type SaveCommandOptions = {
   /** The command to save; empty: the user writes one. */
   command: string;
-  /** The folder of the tab; `null`: none known, it can only hold everywhere. */
-  folder: string | null;
+  /** The space of the tab; `null`: none, it can only hold everywhere. */
+  space: { id: number; name: string } | null;
   onSave(favorite: Favorite): void;
   /** The dialog is gone, saved or not. */
   onClose(): void;
@@ -20,8 +19,8 @@ export function isSaveCommandOpen(): boolean {
 
 /**
  * The dialog that saves a command: the command, its name (guessed from the
- * command until the user writes one), and where it holds, this folder or
- * every folder. Enter saves, Escape or a click outside does not.
+ * command until the user writes one), and where it holds, this space or
+ * everywhere. Enter saves, Escape or a click outside does not.
  */
 export function openSaveCommand(options: SaveCommandOptions): void {
   open?.close();
@@ -52,18 +51,18 @@ export function openSaveCommand(options: SaveCommandOptions): void {
     named = true;
   });
 
-  let everywhere = options.folder === null;
+  let everywhere = options.space === null;
   const where = div("save-segments");
   const choices: [boolean, string][] = [
-    [false, options.folder ? `This folder · ${folderName(options.folder)}` : "This folder"],
-    [true, "Every folder"],
+    [false, options.space ? `This space · ${options.space.name}` : "This space"],
+    [true, "Everywhere"],
   ];
   const segments = choices.map(([value, label]) => {
     const segment = document.createElement("button");
     segment.type = "button";
     segment.className = "save-segment";
     segment.textContent = label;
-    segment.disabled = !value && options.folder === null;
+    segment.disabled = !value && options.space === null;
     segment.addEventListener("click", () => {
       everywhere = value;
       paint();
@@ -112,7 +111,7 @@ export function openSaveCommand(options: SaveCommandOptions): void {
     const favorite: Favorite = {
       name: name.value.trim() || guessName(text),
       command: text,
-      folder: everywhere ? null : options.folder,
+      space: everywhere ? null : (options.space?.id ?? null),
       pinned: false,
     };
     close();

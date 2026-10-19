@@ -15,7 +15,7 @@ export type HeaderView = {
   /** The folder it works in, `null` until the core tells. */
   cwd: string | null;
   status: TabStatus;
-  /** The saved commands of the folder in the header, in their order. */
+  /** The saved commands of the space in the header, in their order. */
   favorites: Favorite[];
   /** The command running in the tab, if one is: its chip is tinted. */
   running: string | null;
@@ -34,7 +34,7 @@ export type HeaderOptions = {
 /**
  * The line above the terminal: the space of the visible tab, the tab, then
  * the folder it works in and the branch of that folder, then the saved
- * commands of that folder in the header, and the button of their menu. The
+ * commands of its space in the header, and the button of their menu. The
  * right end is kept for what comes next (split buttons).
  *
  * With the sidebar collapsed the rail has no space name: the one here is
@@ -89,7 +89,7 @@ export class Header {
     this.favoritesButton = document.createElement("button");
     this.favoritesButton.type = "button";
     this.favoritesButton.className = "header-favorites-button";
-    this.favoritesButton.title = "Saved commands of this folder";
+    this.favoritesButton.title = "Saved commands of this space";
     this.favoritesButton.innerHTML = BOOKMARK_ICON;
     const favorites = span("header-favorites");
     favorites.append(this.chips, this.favoritesButton);

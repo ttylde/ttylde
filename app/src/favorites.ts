@@ -4,8 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 export type Favorite = {
   name: string;
   command: string;
-  /** The folder it is for; `null`: every folder. */
-  folder: string | null;
+  /** The id of the space it is for; `null`: every space, and no space. */
+  space: number | null;
   /** A chip in the header, not only in the menu. */
   pinned: boolean;
 };
@@ -23,34 +23,37 @@ export function guessName(command: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-/** Whether `favorite` holds in `cwd`: it is for that folder, or for every one. */
-export function holdsIn(favorite: Favorite, cwd: string | null): boolean {
-  return favorite.folder === null || favorite.folder === cwd;
+/**
+ * Whether `favorite` holds in `space` (`null`: a tab in no space, or a
+ * pinned one): it is for that space, or for every one.
+ */
+export function holdsIn(favorite: Favorite, space: number | null): boolean {
+  return favorite.space === null || favorite.space === space;
 }
 
 /**
- * The saved commands of `cwd` as the menu lists them: those in the header
+ * The saved commands of `space` as the menu lists them: those in the header
  * first, then the others, each part in the order of `list`.
  */
-export function menuOf(list: Favorite[], cwd: string | null): Favorite[] {
-  const here = list.filter((favorite) => holdsIn(favorite, cwd));
+export function menuOf(list: Favorite[], space: number | null): Favorite[] {
+  const here = list.filter((favorite) => holdsIn(favorite, space));
   return [...here.filter((f) => f.pinned), ...here.filter((f) => !f.pinned)];
 }
 
 /**
- * `list` after a row of the menu of `cwd` is dragged. The menu is its rows
+ * `list` after a row of the menu of `space` is dragged. The menu is its rows
  * with the line between pinned and not in between: `from` and `to` count
  * that line as a row too, `to` being the place of the row once dropped.
  * A row above the line ends up in the header. The commands of other
- * folders keep their places in `list`.
+ * spaces keep their places in `list`.
  */
 export function rearrange(
   list: Favorite[],
-  cwd: string | null,
+  space: number | null,
   from: number,
   to: number,
 ): Favorite[] {
-  const menu = menuOf(list, cwd);
+  const menu = menuOf(list, space);
   const pinned = menu.filter((f) => f.pinned).length;
   const LINE = null;
   const rows: (Favorite | null)[] = [...menu.slice(0, pinned), LINE, ...menu.slice(pinned)];
@@ -101,9 +104,9 @@ export class FavoriteStore {
     this.listeners.push(listener);
   }
 
-  /** Whether `command` is saved for `cwd`, or for every folder. */
-  has(command: string, cwd: string | null): boolean {
-    return this.items.some((f) => f.command === command && holdsIn(f, cwd));
+  /** Whether `command` is saved for `space`, or for every space. */
+  has(command: string, space: number | null): boolean {
+    return this.items.some((f) => f.command === command && holdsIn(f, space));
   }
 
   /** Adds `favorite` at the end of those in the header, or of the others. */
@@ -117,11 +120,18 @@ export class FavoriteStore {
     this.changed();
   }
 
-  /** Applies a drag in the menu of `cwd`: see `rearrange`. */
-  move(cwd: string | null, from: number, to: number): void {
-    const next = rearrange(this.items, cwd, from, to);
+  /** Applies a drag in the menu of `space`: see `rearrange`. */
+  move(space: number | null, from: number, to: number): void {
+    const next = rearrange(this.items, space, from, to);
     if (next === this.items) return;
     this.items = next;
+    this.changed();
+  }
+
+  /** The space `id` is gone: its saved commands go with it. */
+  removeSpace(id: number): void {
+    if (!this.items.some((f) => f.space === id)) return;
+    this.items = this.items.filter((f) => f.space !== id);
     this.changed();
   }
 

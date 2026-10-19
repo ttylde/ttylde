@@ -10,7 +10,6 @@ import {
   timeOf,
 } from "./history";
 import { BOOKMARK_ICON, SEARCH_ICON } from "./icons";
-import { folderName } from "./label";
 import { cleanName } from "./look";
 import { SHELLS, SPACE_COLORS, type Space, type SpaceChanges, tabCount } from "./space";
 import type { ClosedSpace } from "./tabs";
@@ -21,13 +20,16 @@ export type PaletteOptions = {
   /** How many tabs the space shown has: deleting it closes them. */
   spaceTabs(): number;
   closedSpaces(): ClosedSpace[];
+  /** The name of the space `id`, if it is still there. */
+  spaceName(id: number): string | null;
   /** Where a command ran, for its row: a tab open there, or the folder. */
   whereOf(cwd: string | null): string;
   favorites: FavoriteStore;
-  /** The folders of the tabs of the space shown: its saved commands. */
-  spaceFolders(): string[];
-  /** Opens the dialog that saves `command`, for `cwd` or every folder. */
-  saveCommand(command: string, cwd: string | null): void;
+  /**
+   * Opens the dialog that saves `command`, for the space `space` (`null`:
+   * the one shown) or everywhere.
+   */
+  saveCommand(command: string, space: number | null): void;
   collapsed(): boolean;
   /** Runs `command` in the tab shown, or in a new one if there is none. */
   run(command: string): void;
@@ -222,7 +224,7 @@ export class Palette {
     } else if (mod && e.key.toLowerCase() === "s") {
       e.preventDefault();
       const item = this.items[this.selected];
-      if (item?.kind === "command") this.save(item.command.last.command, item.command.last.cwd);
+      if (item?.kind === "command") this.save(item.command.last.command, item.command.last.space);
     }
   }
 
@@ -276,9 +278,9 @@ export class Palette {
   }
 
   // Closes, and opens the dialog that saves `command`.
-  private save(command: string, cwd: string | null): void {
+  private save(command: string, space: number | null): void {
     this.close();
-    this.options.saveCommand(command, cwd);
+    this.options.saveCommand(command, space);
   }
 
   private runAndClose(command: string): void {
@@ -420,7 +422,7 @@ export class Palette {
       when.append(element("span", "palette-where", where), element("span", "palette-dot", "·"));
     when.append(element("span", "palette-time", timeOf(last.ended)));
     row.append(when);
-    const saved = this.options.favorites.has(last.command, last.cwd);
+    const saved = this.options.favorites.has(last.command, last.space);
     const bookmark = document.createElement("button");
     bookmark.type = "button";
     bookmark.className = "palette-bookmark";
@@ -430,7 +432,7 @@ export class Palette {
     bookmark.addEventListener("mousedown", (e) => e.preventDefault());
     bookmark.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (!saved) this.save(last.command, last.cwd);
+      if (!saved) this.save(last.command, last.space);
     });
     row.append(bookmark);
     const remove = document.createElement("button");
@@ -448,10 +450,9 @@ export class Palette {
 
   // The saved commands in the scope, those the text is part of.
   private drawSaved(): void {
-    const folders = new Set(this.options.spaceFolders());
     const text = this.text.toLowerCase();
-    const inScope = (f: Favorite) =>
-      this.scope === "all" || f.folder === null || folders.has(f.folder);
+    const space = this.spaceId;
+    const inScope = (f: Favorite) => space === null || f.space === null || f.space === space;
     const shown = this.options.favorites.list.filter(
       (f) =>
         inScope(f) &&
@@ -474,7 +475,8 @@ export class Palette {
     row.append(mark, element("span", "palette-command", favorite.command));
     row.append(element("span", "palette-name", favorite.name));
     const when = element("span", "palette-when");
-    const where = favorite.folder ? folderName(favorite.folder) : "every folder";
+    const where =
+      favorite.space === null ? "everywhere" : (this.options.spaceName(favorite.space) ?? "");
     when.append(element("span", "palette-where", where));
     if (favorite.pinned) {
       when.append(
