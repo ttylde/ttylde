@@ -369,7 +369,7 @@ function openSpaceMenu(anchor?: HTMLElement): void {
               icon: SETTINGS_ICON,
               hint: ACTIONS_HINT,
               quiet: true,
-              onSelect: () => palette.open("actions", true),
+              onSelect: () => palette.open("actions", "@space "),
             },
           ]
         : []),

@@ -1,4 +1,5 @@
 import type { Favorite, FavoriteStore } from "./favorites";
+import { asked } from "./filters";
 import {
   byDay,
   clear,
@@ -55,6 +56,8 @@ type Item =
   | { kind: "favorite"; favorite: Favorite }
   /** Saves the text typed as a command, or a new one from scratch. */
   | { kind: "save"; command: string }
+  /** A filter of the actions: picked, it is typed in. */
+  | { kind: "filter"; token: string }
   | { kind: "action"; label: string; hint: string; run(): void }
   | { kind: "setting"; setting: Setting }
   | { kind: "clear" };
@@ -150,24 +153,17 @@ export class Palette {
     return this.tab;
   }
 
-  /**
-   * Opens on `tab`, with nothing typed. With `settings`, on the actions with
-   * the first setting of the space selected: the space menu asks for them.
-   */
-  open(tab: Tab = "recent", settings = false): void {
+  /** Opens on `tab`, with `text` typed: `@space ` from the space menu. */
+  open(tab: Tab = "recent", text = ""): void {
     this.tab = tab;
     this.scope = this.options.space() ? "space" : "all";
-    this.input.value = "";
+    this.input.value = text;
     this.selected = 0;
     this.editing = null;
     this.confirming = null;
     this.backdrop.hidden = false;
     this.panel.hidden = false;
-    void this.refresh().then(() => {
-      if (!settings) return;
-      const first = this.items.findIndex((item) => item.kind === "setting");
-      if (first >= 0) this.select(first);
-    });
+    void this.refresh();
     this.input.focus();
   }
 
@@ -266,6 +262,12 @@ export class Palette {
       case "save":
         this.save(item.command, null);
         break;
+      case "filter":
+        this.input.value = `${item.token} `;
+        this.selected = 0;
+        this.draw();
+        this.input.focus();
+        break;
       case "action":
         this.close();
         item.run();
@@ -357,7 +359,7 @@ export class Palette {
     this.input.placeholder = {
       recent: "Search a command…",
       saved: "Filter saved commands…",
-      actions: "Search an action…",
+      actions: "Search an action, or @space…",
     }[this.tab];
     this.list.replaceChildren();
     this.items = [];
@@ -374,7 +376,11 @@ export class Palette {
   }
 
   private emptyText(): string {
-    if (this.tab === "actions") return "No action matches.";
+    if (this.tab === "actions") {
+      return asked(this.input.value).kind === "choosing"
+        ? "No such filter: @space is the one there is."
+        : "No action matches.";
+    }
     if (this.tab === "saved") return "No saved command matches.";
     if (this.text) return `No results · Enter to run "${this.text}"`;
     return "No command in this scope yet.";
@@ -526,10 +532,18 @@ export class Palette {
 
   private drawActions(): void {
     const space = this.options.space();
-    const actions: { label: string; hint: string; run(): void }[] = [
+    // `space`: one of the actions of the space shown, for `@space`.
+    const actions: { label: string; hint: string; space?: boolean; run(): void }[] = [
       { label: "New tab", hint: "⌘T", run: () => this.options.newTab() },
       ...(space
-        ? [{ label: "Save and close space", hint: "", run: () => this.options.closeSpace() }]
+        ? [
+            {
+              label: "Save and close space",
+              hint: "",
+              space: true,
+              run: () => this.options.closeSpace(),
+            },
+          ]
         : []),
       {
         label: this.options.collapsed() ? "Expand sidebar" : "Collapse sidebar",
@@ -542,19 +556,32 @@ export class Palette {
         run: () => this.options.reopen(index),
       })),
     ];
-    const text = this.text.toLowerCase();
-    for (const action of actions.filter((a) => a.label.toLowerCase().includes(text))) {
+    const query = asked(this.input.value);
+    if (query.kind === "choosing") {
+      for (const filter of query.filters) {
+        const row = this.row({ kind: "filter", token: filter.token }, "palette-row palette-action");
+        row.append(element("span", "palette-filter", filter.token));
+        row.append(element("span", "palette-hint", filter.label));
+      }
+      return;
+    }
+    // `@space` keeps the actions of the space and its settings.
+    const shown = query.kind === "filter" ? (space ? actions.filter((a) => a.space) : []) : actions;
+    const text = query.text;
+    for (const action of shown.filter((a) => a.label.toLowerCase().includes(text))) {
       const row = this.row({ kind: "action", ...action }, "palette-row palette-action");
       row.append(element("span", "palette-label", action.label));
       if (action.hint) row.append(element("span", "palette-hint", action.hint));
     }
-    if (space) this.drawSettings(space, text);
+    if (space) this.drawSettings(space, text, query.kind === "filter");
   }
 
   // The settings of the space shown, those whose name the text matches;
-  // the name of the space or "space" matches them all.
-  private drawSettings(space: Space, text: string): void {
-    const all = !text || "space".includes(text) || space.name.toLowerCase().includes(text);
+  // the name of the space or "space" matches them all. Under `@space` the
+  // text narrows them by their names alone.
+  private drawSettings(space: Space, text: string, filtered: boolean): void {
+    const all =
+      !text || (!filtered && ("space".includes(text) || space.name.toLowerCase().includes(text)));
     const settings: { id: Setting; label: string }[] = [
       { id: "rename", label: "rename space" },
       { id: "color", label: "space color" },
