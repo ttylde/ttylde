@@ -1,5 +1,5 @@
 import type { Favorite } from "./favorites";
-import { BOOKMARK_ICON, BRANCH_ICON, FOLDER_ICON, PLAY_ICON } from "./icons";
+import { BRANCH_ICON, CHEVRON_DOWN_ICON, FOLDER_ICON, PLAY_ICON, ZAP_ICON } from "./icons";
 import { folderName } from "./label";
 import type { Space } from "./space";
 import { describe, shown, type TabStatus } from "./status";
@@ -17,6 +17,8 @@ export type HeaderView = {
   status: TabStatus;
   /** The saved commands of the space in the header, in their order. */
   favorites: Favorite[];
+  /** How many more are only in the menu: the button says it. */
+  hidden: number;
   /** The command running in the tab, if one is: its chip is tinted. */
   running: string | null;
 };
@@ -55,6 +57,7 @@ export class Header {
   private readonly chips: HTMLElement;
   /** Opens the menu of the saved commands. */
   readonly favoritesButton: HTMLButtonElement;
+  private readonly hiddenCount: HTMLElement;
   // The whole path of the folder, which a click copies.
   private cwd: string | null = null;
 
@@ -90,7 +93,10 @@ export class Header {
     this.favoritesButton.type = "button";
     this.favoritesButton.className = "header-favorites-button";
     this.favoritesButton.title = "Saved commands of this space";
-    this.favoritesButton.innerHTML = BOOKMARK_ICON;
+    this.hiddenCount = span("header-favorites-count");
+    const opens = span("header-favorites-chevron");
+    opens.innerHTML = CHEVRON_DOWN_ICON;
+    this.favoritesButton.append(icon(ZAP_ICON), this.hiddenCount, opens);
     const favorites = span("header-favorites");
     favorites.append(this.chips, this.favoritesButton);
 
@@ -156,6 +162,7 @@ export class Header {
       this.branch.title = `${branch}: ${dirty ? "changes to commit" : "nothing to commit"}`;
     }
 
+    this.hiddenCount.textContent = view.hidden > 0 ? String(view.hidden) : "";
     this.chips.replaceChildren(
       ...view.favorites.map((favorite) => {
         const chip = document.createElement("button");

@@ -1831,15 +1831,29 @@ body.no-space #space-dot .dot {
 }
 
 .header-favorites-button {
-  display: grid;
+  display: flex;
   flex: none;
-  place-items: center;
+  align-items: center;
+  gap: 4px;
   padding: 3px 6px;
   border: 0;
   border-radius: 6px;
   background: none;
   color: var(--muted);
   cursor: pointer;
+}
+
+.header-favorites-count {
+  font: 11px var(--mono);
+}
+
+.header-favorites-count:empty {
+  display: none;
+}
+
+.header-favorites-chevron {
+  display: flex;
+  opacity: 0.6;
 }
 
 .header-favorites-button:hover,

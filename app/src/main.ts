@@ -148,13 +148,20 @@ function showHeader(): void {
       git: shown.git,
       cwd: shown.cwd,
       status: shown.status,
-      favorites: menuOf(favorites.list, shownSpace()?.id ?? null, shown.favorites).header,
+      ...headerFavorites(shown),
       running:
         shown.status.status === "running" || shown.status.status === "active"
           ? shown.command
           : null,
     },
   );
+}
+
+// The saved commands `tab` has in its header, and how many are only in
+// its menu.
+function headerFavorites(tab: Tab): { favorites: Favorite[]; hidden: number } {
+  const menu = menuOf(favorites.list, shownSpace()?.id ?? null, tab.favorites);
+  return { favorites: menu.header, hidden: menu.others.length };
 }
 
 // Runs `command` in the tab shown; with none, a new one opens for it, as
