@@ -85,20 +85,24 @@ pub fn load(path: &Path) -> Result<State> {
     }
 }
 
-/// Writes `state` to `path`, making its folder if needed. The text goes to
-/// a temporary file next to it first, then takes the place of the old one:
-/// a crash halfway leaves the old file whole.
+/// Writes `state` to `path`: see `write_private`.
 pub fn save(state: &State, path: &Path) -> Result<()> {
+    let text = toml::to_string(state).map_err(|e| Error::State(e.to_string()))?;
+    write_private(path, &text)?;
+    Ok(())
+}
+
+/// Writes `text` to `path`, making its folder if needed, readable by its
+/// owner only. The text goes to a temporary file next to it first, then
+/// takes the place of the old one: a crash halfway leaves the old file whole.
+pub(crate) fn write_private(path: &Path, text: &str) -> io::Result<()> {
     if let Some(folder) = path.parent() {
         fs::create_dir_all(folder)?;
     }
-    let text = toml::to_string(state).map_err(|e| Error::State(e.to_string()))?;
-
     // Next to the file, not in `/tmp`: a rename within one folder is atomic.
     let temporary = with_suffix(path, ".tmp");
     private_file(&temporary)?.write_all(text.as_bytes())?;
-    fs::rename(&temporary, path)?;
-    Ok(())
+    fs::rename(&temporary, path)
 }
 
 // A file only its owner can read: the state has the commands the user ran.

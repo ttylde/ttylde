@@ -7,6 +7,7 @@ pub mod config;
 pub mod cwd;
 pub mod emulator;
 pub mod error;
+pub mod favorites;
 pub mod frame;
 pub mod git;
 pub mod history;
