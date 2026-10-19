@@ -26,6 +26,9 @@ export const NEW_TAB_HINT = IS_MAC ? "⌘T" : "Ctrl+Shift+T";
 /** How the shortcut of the palette on its commands is written here. */
 export const PALETTE_HINT = IS_MAC ? "⌘P" : "Ctrl+Shift+R";
 
+/** How the shortcut of the palette on its actions is written here. */
+export const ACTIONS_HINT = IS_MAC ? "⌘⇧P" : "Ctrl+Shift+P";
+
 function hasAppModifier(e: KeyStroke, mac: boolean): boolean {
   if (e.altKey) return false;
   return mac ? e.metaKey && !e.ctrlKey && !e.shiftKey : e.ctrlKey && e.shiftKey && !e.metaKey;

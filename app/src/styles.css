@@ -1233,8 +1233,7 @@ body.collapsed #toggle-sidebar:hover {
   gap: 7px;
 }
 
-.swatches,
-.form-actions {
+.swatches {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1245,45 +1244,6 @@ body.collapsed #toggle-sidebar:hover {
   display: grid;
   grid-template-columns: repeat(8, 28px);
   gap: 2px;
-}
-
-.form-actions {
-  justify-content: flex-end;
-  font-size: 12px;
-}
-
-/* A field with what it is for written above it. */
-.form-label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  color: var(--muted);
-  font-size: 11.5px;
-}
-
-/* Choices side by side: the one picked is raised out of the groove. */
-.segments {
-  display: flex;
-  gap: 4px;
-  width: fit-content;
-  padding: 3px;
-  border-radius: 8px;
-  background: rgba(21, 33, 28, 0.06);
-  font: 12px var(--mono);
-}
-
-.form .segment {
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: none;
-  color: var(--muted);
-}
-
-.form .segment.picked {
-  background: var(--panel);
-  box-shadow: var(--shadow-button);
-  color: var(--ink);
-  font-weight: 600;
 }
 
 .form .swatch {
@@ -1317,45 +1277,6 @@ body.collapsed #toggle-sidebar:hover {
 
 .form .glyph.picked {
   background: rgba(36, 102, 255, 0.14);
-}
-
-.form .ghost {
-  padding: 5px 10px;
-  border-radius: 6px;
-  background: none;
-  color: var(--muted);
-}
-
-.form .ghost:hover {
-  background: var(--hover);
-}
-
-/* The primary button: solid white and lifted, the one opaque thing. */
-.form .primary {
-  padding: 5px 12px;
-  border-radius: var(--radius-button);
-  background: #fff;
-  box-shadow: var(--shadow-button);
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.form .primary:hover {
-  background: #f5f7fc;
-}
-
-/* What takes something away: at the other end from the buttons that keep. */
-.form .danger {
-  margin-right: auto;
-  padding: 5px 8px;
-  border-radius: 6px;
-  background: none;
-  color: var(--danger);
-}
-
-.form .danger:hover,
-.form .danger.asked {
-  background: rgba(208, 74, 66, 0.08);
 }
 
 /* Off-screen but focusable: it receives the keyboard instead of the canvas. */

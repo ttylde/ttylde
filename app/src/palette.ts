@@ -150,8 +150,11 @@ export class Palette {
     return this.tab;
   }
 
-  /** Opens on `tab`, with nothing typed. */
-  open(tab: Tab = "recent"): void {
+  /**
+   * Opens on `tab`, with nothing typed. With `settings`, on the actions with
+   * the first setting of the space selected: the space menu asks for them.
+   */
+  open(tab: Tab = "recent", settings = false): void {
     this.tab = tab;
     this.scope = this.options.space() ? "space" : "all";
     this.input.value = "";
@@ -160,7 +163,11 @@ export class Palette {
     this.confirming = null;
     this.backdrop.hidden = false;
     this.panel.hidden = false;
-    void this.refresh();
+    void this.refresh().then(() => {
+      if (!settings) return;
+      const first = this.items.findIndex((item) => item.kind === "setting");
+      if (first >= 0) this.select(first);
+    });
     this.input.focus();
   }
 

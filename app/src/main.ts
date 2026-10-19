@@ -10,7 +10,7 @@ import {
 } from "./favorites-menu";
 import { isFormOpen } from "./form";
 import { Header } from "./header";
-import { PLUS_ICON, SIDEBAR_ICON } from "./icons";
+import { PLUS_ICON, SETTINGS_ICON, SIDEBAR_ICON } from "./icons";
 import { attachKeyboard } from "./input";
 import { folderName } from "./label";
 import { Launcher } from "./launcher";
@@ -19,10 +19,9 @@ import { OfferBanner } from "./offer";
 import { Palette } from "./palette";
 import { fontStack } from "./renderer";
 import { isSaveCommandOpen, openSaveCommand } from "./save-command";
-import { actionOf, NEW_TAB_HINT, PALETTE_HINT } from "./shortcuts";
+import { ACTIONS_HINT, actionOf, NEW_TAB_HINT, PALETTE_HINT } from "./shortcuts";
 import type { Space } from "./space";
 import { ago, tabCount } from "./space";
-import { openSpaceSettings } from "./space-settings";
 import { defaultTitle, type Tab, titleOf, typeCommand } from "./tab";
 import { Tabs } from "./tabs";
 import { toast } from "./toast";
@@ -331,22 +330,6 @@ function underSpace(): { left: number; top: number; width: number } {
   };
 }
 
-// The settings of the space that is shown.
-function openSettings(): void {
-  const current = tabs.spaceList().find((info) => info.current);
-  if (!current) return;
-  const { left, top } = underSpace();
-  openSpaceSettings({
-    space: current.space,
-    tabs: current.tabs,
-    left,
-    top,
-    onSave: (changes) => tabs.editSpace(changes),
-    onDelete: deleteSpace,
-    onClose: () => keyboard.focus(),
-  });
-}
-
 // Under the space in the header, where it is asked for with the sidebar
 // collapsed.
 function under(anchor: HTMLElement): { left: number; top: number; width: number } {
@@ -379,7 +362,16 @@ function openSpaceMenu(anchor?: HTMLElement): void {
         onSelect: () => void tabs.newSpace(),
       },
       ...(tabs.spaceList().some((info) => info.current)
-        ? [{ label: "Space settings…", icon: "›", quiet: true, onSelect: openSettings }]
+        ? [
+            {
+              // In the palette, with the actions, as everything else to do.
+              label: "Space settings…",
+              icon: SETTINGS_ICON,
+              hint: ACTIONS_HINT,
+              quiet: true,
+              onSelect: () => palette.open("actions", true),
+            },
+          ]
         : []),
       ...(tabs.looseCount() > 0
         ? [
