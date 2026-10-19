@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 
+import { COLORS } from "./look";
 import { ago, createSpace, SPACE_COLORS, type Space, stepIndex, tabCount } from "./space";
 
 function spaces(count: number): Space[] {
@@ -92,5 +93,12 @@ describe("tabCount", () => {
     expect(tabCount(1)).toBe("1 tab");
     expect(tabCount(0)).toBe("0 tabs");
     expect(tabCount(4)).toBe("4 tabs");
+  });
+});
+
+describe("SPACE_COLORS", () => {
+  test("are the colors of the tabs, the first spaces in blue", () => {
+    expect([...SPACE_COLORS].sort()).toEqual([...COLORS].sort());
+    expect(SPACE_COLORS[0]).toBe("#2466ff");
   });
 });

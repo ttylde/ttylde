@@ -11,8 +11,8 @@ import {
   timeOf,
 } from "./history";
 import { BOOKMARK_ICON, SEARCH_ICON } from "./icons";
-import { cleanName } from "./look";
-import { SHELLS, SPACE_COLORS, type Space, type SpaceChanges, tabCount } from "./space";
+import { COLORS, cleanName } from "./look";
+import { SHELLS, type Space, type SpaceChanges, tabCount } from "./space";
 import type { ClosedSpace } from "./tabs";
 
 export type PaletteOptions = {
@@ -368,7 +368,7 @@ export class Palette {
         this.draw();
         break;
       case "color": {
-        const next = SPACE_COLORS[(SPACE_COLORS.indexOf(space.color) + 1) % SPACE_COLORS.length];
+        const next = COLORS[(COLORS.indexOf(space.color) + 1) % COLORS.length];
         this.change({ color: next });
         break;
       }
@@ -658,7 +658,8 @@ export class Palette {
       case "color": {
         row.append(element("span", "palette-label", "Space color"));
         const swatches = element("span", "palette-swatches");
-        for (const color of SPACE_COLORS) {
+        // The colors of the tabs, as in the mockup: the brand, then the spectrum.
+        for (const color of COLORS) {
           const swatch = element("span", "palette-swatch");
           // One of the palette, never text typed by someone.
           swatch.style.background = color;
