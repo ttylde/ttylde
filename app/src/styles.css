@@ -1775,3 +1775,478 @@ body.no-space #space-dot .dot {
   border-radius: 50%;
   background: #1f52d6;
 }
+
+/* The saved commands of the folder in the header, and the button of their
+   menu: after the folder and the branch, the rest of the line theirs. */
+.header-favorites {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.header-chips {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.header-chip-favorite {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(21, 33, 28, 0.06);
+  color: var(--ink);
+  font: 600 11px var(--mono);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.header-chip-favorite:hover {
+  background: rgba(21, 33, 28, 0.11);
+}
+
+.header-play {
+  display: flex;
+  color: var(--muted);
+}
+
+/* The one running in the tab. */
+.header-chip-favorite.running {
+  background: rgba(36, 102, 255, 0.12);
+}
+
+.header-chip-favorite.running .header-play {
+  color: #1f52d6;
+}
+
+.header-favorites-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.header-favorites-button:hover,
+.header-favorites-button.open {
+  background: rgba(21, 33, 28, 0.06);
+  color: var(--ink);
+}
+
+/* The menu of the saved commands, under its button. */
+.favorites-menu {
+  position: fixed;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 310px;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 18px 44px rgba(21, 33, 28, 0.16),
+    0 0 0 1px rgba(21, 33, 28, 0.05);
+  color: var(--ink);
+  font: 12.5px var(--ui);
+}
+
+.favorites-heading {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px 4px;
+  color: var(--muted);
+  font: 600 10px var(--ui);
+  letter-spacing: 0.08em;
+}
+
+.favorites-folder {
+  font: 11px var(--mono);
+  letter-spacing: 0;
+}
+
+.favorites-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 5px;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 6px;
+}
+
+.favorites-row:hover {
+  background: rgba(21, 33, 28, 0.04);
+}
+
+.favorites-row.dragging {
+  position: relative;
+  z-index: 1;
+  background: #fff;
+  box-shadow: var(--shadow-row);
+}
+
+.favorites-row.drop-above,
+.favorites-line.drop-above {
+  border-top-color: var(--accent);
+}
+
+.favorites-row.drop-below,
+.favorites-line.drop-below {
+  border-bottom-color: var(--accent);
+}
+
+.favorites-grip {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  color: #b8c2bd;
+  cursor: grab;
+  touch-action: none;
+}
+
+.favorites-name {
+  flex: none;
+  color: var(--muted);
+}
+
+.favorites-row.pinned .favorites-name {
+  color: var(--ink);
+}
+
+.favorites-command {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font: 11px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.favorites-run,
+.favorites-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: 13px / 1 var(--ui);
+  cursor: pointer;
+}
+
+.favorites-run {
+  margin-left: auto;
+}
+
+.favorites-run:hover {
+  background: rgba(36, 102, 255, 0.12);
+  color: #123dba;
+}
+
+.favorites-remove {
+  color: #93a19b;
+}
+
+.favorites-remove:hover {
+  background: var(--hover);
+  color: var(--danger);
+}
+
+.favorites-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 6px 1px;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  color: #8a9a93;
+  font: 600 9.5px var(--ui);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.favorites-line-rule {
+  flex: 1;
+  height: 1px;
+  background: rgba(21, 33, 28, 0.1);
+}
+
+.favorites-empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.favorites-rule {
+  height: 1px;
+  margin: 3px 6px;
+  background: var(--line);
+}
+
+.favorites-save {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.favorites-save:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.favorites-plus {
+  display: flex;
+}
+
+.favorites-last {
+  min-width: 0;
+  overflow: hidden;
+  font: 11px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.favorites-hint {
+  padding: 4px 10px 6px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+/* The dialog that saves a command. */
+.save-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: rgba(21, 33, 28, 0.18);
+}
+
+.save-command {
+  position: fixed;
+  top: 120px;
+  left: 50%;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(440px, 90vw);
+  box-sizing: border-box;
+  padding: 16px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 30px 80px rgba(21, 33, 28, 0.22),
+    0 0 0 1px rgba(21, 33, 28, 0.05);
+  color: var(--ink);
+  font: 12.5px var(--ui);
+}
+
+.save-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.save-icon {
+  display: flex;
+  color: var(--muted);
+}
+
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.save-label {
+  flex: none;
+  width: 64px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.save-box {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid rgba(21, 33, 28, 0.14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.save-dollar {
+  color: var(--muted);
+  font: 12.5px var(--mono);
+}
+
+.save-field {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(21, 33, 28, 0.14);
+  border-radius: 7px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+  font: 13px var(--mono);
+}
+
+.save-box .save-field {
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+}
+
+.save-segments {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(21, 33, 28, 0.05);
+}
+
+.save-segment {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: 12px var(--ui);
+  cursor: pointer;
+}
+
+.save-segment.current {
+  background: #fff;
+  box-shadow: var(--shadow-row);
+  color: var(--ink);
+}
+
+.save-segment:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.save-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.save-cancel,
+.save-confirm {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: 12px var(--ui);
+  cursor: pointer;
+}
+
+.save-cancel:hover {
+  background: var(--hover);
+}
+
+.save-confirm {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow-button);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.save-confirm:hover {
+  background: #f5f7fc;
+}
+
+/* The saved commands in the palette, and the rows that save one. */
+.palette-mark.saved {
+  display: flex;
+  justify-content: center;
+  width: 13px;
+  color: var(--muted);
+}
+
+.palette-name {
+  flex: none;
+  color: var(--muted);
+  font: 11px var(--ui);
+  white-space: nowrap;
+}
+
+.palette-bookmark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  margin-right: -6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #93a19b;
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.palette-bookmark.saved {
+  color: var(--ink);
+  cursor: default;
+  visibility: visible;
+}
+
+.palette-row:hover .palette-bookmark,
+.palette-row.selected .palette-bookmark {
+  visibility: visible;
+}
+
+.palette-bookmark:not(.saved):hover {
+  color: var(--ink);
+}
+
+.palette-save,
+.palette-new {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.palette-save-text {
+  color: var(--ink);
+  font: 12.5px var(--mono);
+}

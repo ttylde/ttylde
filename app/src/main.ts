@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import { type Favorite, FavoriteStore, menuOf } from "./favorites";
+import {
+  closeFavoritesMenu,
+  isFavoritesMenuOpen,
+  openFavoritesMenu,
+  refreshFavoritesMenu,
+} from "./favorites-menu";
 import { isFormOpen } from "./form";
 import { Header } from "./header";
 import { PLUS_ICON, SIDEBAR_ICON } from "./icons";
@@ -11,6 +18,7 @@ import { isMenuOpen, openMenu } from "./menu";
 import { OfferBanner } from "./offer";
 import { Palette } from "./palette";
 import { fontStack } from "./renderer";
+import { isSaveCommandOpen, openSaveCommand } from "./save-command";
 import { actionOf, NEW_TAB_HINT, PALETTE_HINT } from "./shortcuts";
 import { ago, tabCount } from "./space";
 import { openSpaceSettings } from "./space-settings";
@@ -95,10 +103,34 @@ function saveSoon(): void {
   }, 500);
 }
 
+// The saved commands, from the file of last time.
+const favorites = new FavoriteStore();
+await favorites.load();
+
 const keyboard = attachKeyboard(() => tabs.activeId());
 const header = new Header({
   root: element("#header"),
   onSpaceMenu: (anchor) => openSpaceMenu(anchor),
+  onRunFavorite: (favorite) => runCommand(favorite.command),
+  onFavoritesMenu: (anchor) => {
+    if (isFavoritesMenuOpen()) {
+      closeFavoritesMenu();
+      return;
+    }
+    header.setFavoritesOpen(true);
+    openFavoritesMenu({
+      anchor,
+      store: favorites,
+      cwd: shown?.cwd ?? null,
+      lastCommand: shown?.command ?? null,
+      run: (favorite: Favorite) => runCommand(favorite.command),
+      save: (command) => saveCommand(command, shown?.cwd ?? null),
+      onClose: () => {
+        header.setFavoritesOpen(false);
+        if (!isSaveCommandOpen()) keyboard.focus();
+      },
+    });
+  },
 });
 // The tab the window shows, for the header to follow it.
 let shown: Tab | null = null;
@@ -110,8 +142,37 @@ function showHeader(): void {
       git: shown.git,
       cwd: shown.cwd,
       status: shown.status,
+      favorites: menuOf(favorites.list, shown.cwd).filter((f) => f.pinned),
+      running:
+        shown.status.status === "running" || shown.status.status === "active"
+          ? shown.command
+          : null,
     },
   );
+}
+
+// Runs `command` in the tab shown; with none, a new one opens for it, as
+// from the launcher.
+function runCommand(command: string): void {
+  const tab = tabs.activeTab();
+  if (tab) typeCommand(tab, command);
+  else void tabs.open().then((opened) => opened && typeCommand(opened, command));
+}
+
+// The dialog that saves `command`, for `folder` or every folder.
+function saveCommand(command: string, folder: string | null): void {
+  openSaveCommand({
+    command,
+    folder: folder ?? shown?.cwd ?? null,
+    onSave: (favorite) => {
+      favorites.add(favorite);
+      toast(`Saved · ${favorite.name}`);
+    },
+    onClose: () => {
+      if (tabs.activeTab()) keyboard.focus();
+      else launcher.focus();
+    },
+  });
 }
 
 const tabs = new Tabs({
@@ -198,12 +259,10 @@ const palette = new Palette({
   closedSpaces: () => tabs.closedSpaces(),
   whereOf: (cwd) => (cwd === null ? "" : (tabs.nameIn(cwd) ?? folderName(cwd))),
   collapsed: isCollapsed,
-  // In the tab shown; with none, a new one opens for it, as from the launcher.
-  run: (command) => {
-    const tab = tabs.activeTab();
-    if (tab) typeCommand(tab, command);
-    else void tabs.open().then((opened) => opened && typeCommand(opened, command));
-  },
+  run: runCommand,
+  favorites,
+  spaceFolders: () => tabs.foldersOfSpace(),
+  saveCommand,
   newTab: () => void tabs.open(),
   closeSpace: () => tabs.closeSpace(),
   toggleSidebar: () => setCollapsed(!isCollapsed()),
@@ -329,7 +388,7 @@ window.addEventListener(
   (e) => {
     // While a tab is being renamed the keys are for its name, and a menu
     // takes them for itself.
-    if (isFormOpen() || isMenuOpen()) return;
+    if (isFormOpen() || isMenuOpen() || isSaveCommandOpen()) return;
     const action = actionOf(e);
     // Over the palette only its own shortcuts work: the one of the tab it
     // shows closes it, the other goes to the other tab.
@@ -386,6 +445,13 @@ function answerOffer(e: KeyboardEvent): void {
   }
   tabs.dismissOffer();
 }
+
+// Every change to the saved commands shows where they are.
+favorites.onChange(() => {
+  showHeader();
+  refreshFavoritesMenu();
+  palette.redraw();
+});
 
 tabs.restore(saved);
 started = true;

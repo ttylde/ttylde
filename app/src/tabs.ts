@@ -175,6 +175,13 @@ export class Tabs {
     return entry ? titleOf(entry.tab) : null;
   }
 
+  /** The folders the tabs of the space shown are in. */
+  foldersOfSpace(): string[] {
+    if (!this.space) return [];
+    const folders = this.tabsOf(this.space).flatMap(({ tab }) => (tab.cwd ? [tab.cwd] : []));
+    return [...new Set(folders)];
+  }
+
   /** The tab shown, the one the keyboard writes to; `null` with none. */
   activeTab(): Tab | null {
     return this.active;

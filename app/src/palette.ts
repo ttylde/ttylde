@@ -1,3 +1,4 @@
+import type { Favorite, FavoriteStore } from "./favorites";
 import {
   byDay,
   clear,
@@ -8,7 +9,8 @@ import {
   type HistoryCommand,
   timeOf,
 } from "./history";
-import { SEARCH_ICON } from "./icons";
+import { BOOKMARK_ICON, SEARCH_ICON } from "./icons";
+import { folderName } from "./label";
 import { cleanName } from "./look";
 import { SHELLS, SPACE_COLORS, type Space, type SpaceChanges, tabCount } from "./space";
 import type { ClosedSpace } from "./tabs";
@@ -21,6 +23,11 @@ export type PaletteOptions = {
   closedSpaces(): ClosedSpace[];
   /** Where a command ran, for its row: a tab open there, or the folder. */
   whereOf(cwd: string | null): string;
+  favorites: FavoriteStore;
+  /** The folders of the tabs of the space shown: its saved commands. */
+  spaceFolders(): string[];
+  /** Opens the dialog that saves `command`, for `cwd` or every folder. */
+  saveCommand(command: string, cwd: string | null): void;
   collapsed(): boolean;
   /** Runs `command` in the tab shown, or in a new one if there is none. */
   run(command: string): void;
@@ -36,19 +43,23 @@ export type PaletteOptions = {
   onClose(): void;
 };
 
-export type Tab = "recent" | "actions";
+export type Tab = "recent" | "saved" | "actions";
 type Scope = "space" | "all";
 type Setting = "rename" | "color" | "folder" | "shell" | "delete";
 
 /** What a row of the palette does when it is picked. */
 type Item =
   | { kind: "command"; command: HistoryCommand }
+  | { kind: "favorite"; favorite: Favorite }
+  /** Saves the text typed as a command, or a new one from scratch. */
+  | { kind: "save"; command: string }
   | { kind: "action"; label: string; hint: string; run(): void }
   | { kind: "setting"; setting: Setting }
   | { kind: "clear" };
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "recent", label: "Recent" },
+  { id: "saved", label: "Saved" },
   { id: "actions", label: "Actions" },
 ];
 
@@ -127,6 +138,11 @@ export class Palette {
     return !this.panel.hidden;
   }
 
+  /** Draws again, if open: the saved commands changed. */
+  redraw(): void {
+    if (this.isOpen && !this.editing) this.draw();
+  }
+
   /** The tab shown, while it is open. */
   get shownTab(): Tab {
     return this.tab;
@@ -202,6 +218,11 @@ export class Palette {
       e.preventDefault();
       const item = this.items[this.selected];
       if (item?.kind === "command") void this.forget(item.command);
+      if (item?.kind === "favorite") this.options.favorites.remove(item.favorite);
+    } else if (mod && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      const item = this.items[this.selected];
+      if (item?.kind === "command") this.save(item.command.last.command, item.command.last.cwd);
     }
   }
 
@@ -230,6 +251,12 @@ export class Palette {
       case "command":
         this.runAndClose(item.command.last.command);
         break;
+      case "favorite":
+        this.runAndClose(item.favorite.command);
+        break;
+      case "save":
+        this.save(item.command, null);
+        break;
       case "action":
         this.close();
         item.run();
@@ -246,6 +273,12 @@ export class Palette {
         this.setting(item.setting);
         break;
     }
+  }
+
+  // Closes, and opens the dialog that saves `command`.
+  private save(command: string, cwd: string | null): void {
+    this.close();
+    this.options.saveCommand(command, cwd);
   }
 
   private runAndClose(command: string): void {
@@ -312,10 +345,15 @@ export class Palette {
 
   private draw(): void {
     this.drawTabs();
-    this.input.placeholder = this.tab === "recent" ? "Search a command…" : "Search an action…";
+    this.input.placeholder = {
+      recent: "Search a command…",
+      saved: "Filter saved commands…",
+      actions: "Search an action…",
+    }[this.tab];
     this.list.replaceChildren();
     this.items = [];
     if (this.tab === "recent") this.drawRecent();
+    else if (this.tab === "saved") this.drawSaved();
     else this.drawActions();
     if (this.items.length === 0 && this.list.childElementCount === 0) {
       this.list.append(element("div", "palette-empty", this.emptyText()));
@@ -328,6 +366,7 @@ export class Palette {
 
   private emptyText(): string {
     if (this.tab === "actions") return "No action matches.";
+    if (this.tab === "saved") return "No saved command matches.";
     if (this.text) return `No results · Enter to run "${this.text}"`;
     return "No command in this scope yet.";
   }
@@ -355,6 +394,7 @@ export class Palette {
     if (this.text) {
       // Ranked by how well they match: one list, no days.
       for (const command of this.found) this.commandRow(command);
+      if (!this.found.some((c) => c.last.command === this.text)) this.saveRow(this.text);
     } else {
       for (const group of byDay(this.found, Date.now())) {
         this.heading(group.day, commandCount(group.commands.length));
@@ -380,6 +420,19 @@ export class Palette {
       when.append(element("span", "palette-where", where), element("span", "palette-dot", "·"));
     when.append(element("span", "palette-time", timeOf(last.ended)));
     row.append(when);
+    const saved = this.options.favorites.has(last.command, last.cwd);
+    const bookmark = document.createElement("button");
+    bookmark.type = "button";
+    bookmark.className = "palette-bookmark";
+    bookmark.classList.toggle("saved", saved);
+    bookmark.title = saved ? "Saved" : "Save command (⌘S)";
+    bookmark.innerHTML = BOOKMARK_ICON;
+    bookmark.addEventListener("mousedown", (e) => e.preventDefault());
+    bookmark.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!saved) this.save(last.command, last.cwd);
+    });
+    row.append(bookmark);
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "palette-forget";
@@ -391,6 +444,66 @@ export class Palette {
       void this.forget(command);
     });
     row.append(remove);
+  }
+
+  // The saved commands in the scope, those the text is part of.
+  private drawSaved(): void {
+    const folders = new Set(this.options.spaceFolders());
+    const text = this.text.toLowerCase();
+    const inScope = (f: Favorite) =>
+      this.scope === "all" || f.folder === null || folders.has(f.folder);
+    const shown = this.options.favorites.list.filter(
+      (f) =>
+        inScope(f) &&
+        (!text || f.name.toLowerCase().includes(text) || f.command.toLowerCase().includes(text)),
+    );
+    if (shown.length > 0) this.heading("SAVED", String(shown.length));
+    for (const favorite of shown) this.favoriteRow(favorite);
+    if (text) {
+      if (!shown.some((f) => f.command === this.text)) this.saveRow(this.text);
+    } else {
+      const row = this.row({ kind: "save", command: "" }, "palette-row palette-new");
+      row.append(element("span", "palette-mark"), element("span", "", "+ New saved command…"));
+    }
+  }
+
+  private favoriteRow(favorite: Favorite): void {
+    const row = this.row({ kind: "favorite", favorite }, "palette-row palette-command-row");
+    const mark = element("span", "palette-mark saved");
+    mark.innerHTML = BOOKMARK_ICON;
+    row.append(mark, element("span", "palette-command", favorite.command));
+    row.append(element("span", "palette-name", favorite.name));
+    const when = element("span", "palette-when");
+    const where = favorite.folder ? folderName(favorite.folder) : "every folder";
+    when.append(element("span", "palette-where", where));
+    if (favorite.pinned) {
+      when.append(
+        element("span", "palette-dot", "·"),
+        element("span", "palette-time", "in the header"),
+      );
+    }
+    row.append(when);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "palette-forget";
+    remove.title = "Delete saved command (⌘⌫)";
+    remove.textContent = "×";
+    remove.addEventListener("mousedown", (e) => e.preventDefault());
+    remove.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.options.favorites.remove(favorite);
+    });
+    row.append(remove);
+  }
+
+  // "Save ⟨text⟩ as a command…", for text that is not one yet.
+  private saveRow(text: string): void {
+    const row = this.row({ kind: "save", command: text }, "palette-row palette-save");
+    const icon = element("span", "palette-mark saved");
+    icon.innerHTML = BOOKMARK_ICON;
+    const label = element("span", "palette-save-label", "Save ");
+    label.append(element("span", "palette-save-text", text), " as a command…");
+    row.append(icon, label);
   }
 
   private clearRow(): void {
