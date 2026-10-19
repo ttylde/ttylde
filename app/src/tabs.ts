@@ -56,7 +56,14 @@ const TOOLTIP_EVERY = 30_000;
  * What is kept of a tab that closes: what it looked like, the folder it was
  * in, the last command it ran and the one still running, to start again.
  */
-type Kept = { look: Look; cwd: string | null; command: string | null; restart: string | null };
+type Kept = {
+  look: Look;
+  cwd: string | null;
+  command: string | null;
+  restart: string | null;
+  /** The ids of the saved commands in its header. */
+  favorites: number[];
+};
 
 /** What is kept of a closed space: its tabs, and which one was shown. */
 type Saved = { tabs: Kept[]; shown: number; closedAt: number };
@@ -173,6 +180,28 @@ export class Tabs {
   nameIn(cwd: string): string | null {
     const entry = this.entries.find(({ tab }) => tab.cwd === cwd);
     return entry ? titleOf(entry.tab) : null;
+  }
+
+  /** The header of `tab` now has the saved commands `ids`, in this order. */
+  setFavorites(tab: Tab, ids: number[]): void {
+    tab.favorites = ids;
+    if (tab === this.active) this.options.onActiveChange(tab);
+    this.changed();
+  }
+
+  /** Only the saved commands `ids` are still there: the others leave every header. */
+  keepFavorites(ids: Set<number>): void {
+    let gone = false;
+    const keep = (list: number[]) => {
+      const left = list.filter((id) => ids.has(id));
+      gone ||= left.length !== list.length;
+      return left;
+    };
+    for (const { tab } of this.entries) tab.favorites = keep(tab.favorites);
+    for (const saved of this.closed.values()) {
+      for (const kept of saved.tabs) kept.favorites = keep(kept.favorites);
+    }
+    if (gone) this.changed();
   }
 
   /** The tab shown, the one the keyboard writes to; `null` with none. */
@@ -326,6 +355,7 @@ export class Tabs {
     if (from) {
       tab.look = from.look;
       tab.command = from.command;
+      tab.favorites = from.favorites;
     }
 
     const row = document.createElement("div");
@@ -1075,16 +1105,28 @@ export class Tabs {
  * still one to start again.
  */
 function kept(tab: Tab): Kept {
-  return { look: tab.look, cwd: tab.cwd, command: tab.command, restart: tab.restart ?? tab.offer };
+  return {
+    look: tab.look,
+    cwd: tab.cwd,
+    command: tab.command,
+    restart: tab.restart ?? tab.offer,
+    favorites: tab.favorites,
+  };
 }
 
-function toSaved({ look, cwd, command, restart }: Kept): SavedTab {
-  return { ...look, cwd, command, restart };
+function toSaved({ look, cwd, command, restart, favorites }: Kept): SavedTab {
+  return { ...look, cwd, command, restart, favorites };
 }
 
 // A file from before the commands were kept has none.
-function fromSaved({ cwd, command, restart, ...look }: SavedTab): Kept {
-  return { look, cwd, command: command ?? null, restart: restart ?? null };
+function fromSaved({ cwd, command, restart, favorites, ...look }: SavedTab): Kept {
+  return {
+    look,
+    cwd,
+    command: command ?? null,
+    restart: restart ?? null,
+    favorites: favorites ?? [],
+  };
 }
 
 // Tells the session of `entry` the space its tab is in now, for the

@@ -40,6 +40,8 @@ export type SavedTab = {
   command: string | null;
   /** The command running in it when it closed, to start again. */
   restart: string | null;
+  /** The ids of the saved commands in its header, in their order. */
+  favorites: number[];
 };
 
 /** Mirror of `Space` in core/src/state.rs. `closed_at`: `null` if it is open. */

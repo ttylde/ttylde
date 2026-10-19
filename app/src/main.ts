@@ -123,6 +123,11 @@ const header = new Header({
       anchor,
       store: favorites,
       space: shownSpace(),
+      header: () => shown?.favorites ?? [],
+      arrange: (ids) => {
+        if (shown) tabs.setFavorites(shown, ids);
+        refreshFavoritesMenu();
+      },
       lastCommand: shown?.command ?? null,
       run: (favorite: Favorite) => runCommand(favorite.command),
       save: (command) => saveCommand(command, null),
@@ -143,7 +148,7 @@ function showHeader(): void {
       git: shown.git,
       cwd: shown.cwd,
       status: shown.status,
-      favorites: menuOf(favorites.list, shownSpace()?.id ?? null).filter((f) => f.pinned),
+      favorites: menuOf(favorites.list, shownSpace()?.id ?? null, shown.favorites).header,
       running:
         shown.status.status === "running" || shown.status.status === "active"
           ? shown.command
@@ -467,6 +472,8 @@ function answerOffer(e: KeyboardEvent): void {
 
 // Every change to the saved commands shows where they are.
 favorites.onChange(() => {
+  // A command deleted, or the space it was for, leaves every header.
+  tabs.keepFavorites(new Set(favorites.list.map((f) => f.id)));
   showHeader();
   refreshFavoritesMenu();
   palette.redraw();

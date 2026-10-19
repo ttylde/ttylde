@@ -1,4 +1,4 @@
-import { type Favorite, type FavoriteStore, menuOf } from "./favorites";
+import { type Favorite, type FavoriteStore, menuOf, rearrange } from "./favorites";
 import { GRIP_ICON, PLAY_ICON, PLUS_ICON } from "./icons";
 import { dropIndex } from "./reorder";
 
@@ -8,6 +8,10 @@ export type FavoritesMenuOptions = {
   store: FavoriteStore;
   /** The space of the tab shown; `null`: none, or a pinned tab. */
   space: { id: number; name: string } | null;
+  /** The ids of the saved commands in the header of the tab, in order. */
+  header(): number[];
+  /** The tab now has the saved commands `ids` in its header. */
+  arrange(ids: number[]): void;
   /** The last command of the tab, offered to save if it is not saved. */
   lastCommand: string | null;
   run(favorite: Favorite): void;
@@ -31,9 +35,9 @@ export function closeFavoritesMenu(): void {
 
 /**
  * The menu of the saved commands of the space of the tab: first those in
- * the header, then, under a line, those only here. A row dragged by its
- * handle above the line goes in the header, below leaves it; the order is
- * the order of the chips.
+ * the header of the tab, then, under a line, the others. A row dragged by
+ * its handle above the line goes in the header of this tab, below leaves
+ * it; the order is the order of its chips. Every tab has its own.
  */
 export function openFavoritesMenu(options: FavoritesMenuOptions): void {
   current?.close();
@@ -81,15 +85,17 @@ function draw(): void {
   heading.append(element("span", "favorites-folder", options.space?.name ?? "everywhere"));
   root.append(heading);
 
-  const menu = menuOf(store.list, space);
-  const pinned = menu.filter((f) => f.pinned).length;
-  // The rows as `rearrange` counts them: the line between pinned and not is one.
-  const rows: HTMLElement[] = [];
-  menu.forEach((favorite, i) => {
-    if (i === pinned) rows.push(line());
-    rows.push(favoriteRow(favorite));
-  });
-  if (menu.length > 0 && pinned === menu.length) rows.push(line());
+  const menu = menuOf(store.list, space, options.header());
+  const count = menu.header.length + menu.others.length;
+  // The rows as `rearrange` counts them: the line between header and not is one.
+  const rows: HTMLElement[] =
+    count === 0
+      ? []
+      : [
+          ...menu.header.map((f) => favoriteRow(f, true)),
+          line(),
+          ...menu.others.map((f) => favoriteRow(f, false)),
+        ];
   root.append(...rows);
   rows.forEach((row, index) => {
     row.querySelector(".favorites-grip")?.addEventListener("pointerdown", (e) => {
@@ -97,7 +103,7 @@ function draw(): void {
     });
   });
 
-  if (menu.length === 0) {
+  if (count === 0) {
     root.append(
       element(
         "div",
@@ -141,11 +147,11 @@ function line(): HTMLElement {
   return row;
 }
 
-function favoriteRow(favorite: Favorite): HTMLElement {
+function favoriteRow(favorite: Favorite, inHeader: boolean): HTMLElement {
   if (!current) throw new Error("no menu");
   const { options } = current;
   const row = element("div", "favorites-row");
-  row.classList.toggle("pinned", favorite.pinned);
+  row.classList.toggle("pinned", inHeader);
   row.title = favorite.space === null ? `${favorite.command} · everywhere` : favorite.command;
   const grip = element("span", "favorites-grip");
   grip.innerHTML = GRIP_ICON;
@@ -175,13 +181,13 @@ function favoriteRow(favorite: Favorite): HTMLElement {
   return row;
 }
 
-// Drags the row at `from` by its handle; on release the store moves it to
+// Drags the row at `from` by its handle; on release the tab gets the header
 // where it was dropped, the line counted as a row.
 function press(rows: HTMLElement[], from: number, e: PointerEvent): void {
   if (e.button !== 0 || !current) return;
   e.preventDefault();
-  const { store } = current.options;
-  const space = current.options.space?.id ?? null;
+  const { options } = current;
+  const space = options.space?.id ?? null;
   const row = rows[from];
   const centers = rows.map((r) => {
     const box = r.getBoundingClientRect();
@@ -214,7 +220,7 @@ function press(rows: HTMLElement[], from: number, e: PointerEvent): void {
       r.classList.remove("dragging", "drop-above", "drop-below");
       r.style.transform = "";
     }
-    if (dragging) store.move(space, from, to);
+    if (dragging) options.arrange(rearrange(options.store.list, space, options.header(), from, to));
   };
   grip.setPointerCapture(e.pointerId);
   grip.addEventListener("pointermove", move);

@@ -478,12 +478,6 @@ export class Palette {
     const where =
       favorite.space === null ? "everywhere" : (this.options.spaceName(favorite.space) ?? "");
     when.append(element("span", "palette-where", where));
-    if (favorite.pinned) {
-      when.append(
-        element("span", "palette-dot", "·"),
-        element("span", "palette-time", "in the header"),
-      );
-    }
     row.append(when);
     const remove = document.createElement("button");
     remove.type = "button";

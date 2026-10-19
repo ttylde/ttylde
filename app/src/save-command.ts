@@ -6,7 +6,7 @@ export type SaveCommandOptions = {
   command: string;
   /** The space of the tab; `null`: none, it can only hold everywhere. */
   space: { id: number; name: string } | null;
-  onSave(favorite: Favorite): void;
+  onSave(favorite: Omit<Favorite, "id">): void;
   /** The dialog is gone, saved or not. */
   onClose(): void;
 };
@@ -108,11 +108,10 @@ export function openSaveCommand(options: SaveCommandOptions): void {
       command.focus();
       return;
     }
-    const favorite: Favorite = {
+    const favorite = {
       name: name.value.trim() || guessName(text),
       command: text,
       space: everywhere ? null : (options.space?.id ?? null),
-      pinned: false,
     };
     close();
     options.onSave(favorite);

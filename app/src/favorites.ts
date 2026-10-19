@@ -2,12 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 
 /** Mirror of `Favorite` in core/src/favorites.rs: a saved command. */
 export type Favorite = {
+  /** What the tabs name it by: see `Tab.favorites`. */
+  id: number;
   name: string;
   command: string;
   /** The id of the space it is for; `null`: every space, and no space. */
   space: number | null;
-  /** A chip in the header, not only in the menu. */
-  pinned: boolean;
 };
 
 /**
@@ -32,46 +32,40 @@ export function holdsIn(favorite: Favorite, space: number | null): boolean {
 }
 
 /**
- * The saved commands of `space` as the menu lists them: those in the header
- * first, then the others, each part in the order of `list`.
+ * The saved commands a tab of `space` has, split as its menu lists them:
+ * those in its header, in the order of `header` (the ids the tab keeps),
+ * then the others, in the order they were saved.
  */
-export function menuOf(list: Favorite[], space: number | null): Favorite[] {
+export function menuOf(
+  list: Favorite[],
+  space: number | null,
+  header: number[],
+): { header: Favorite[]; others: Favorite[] } {
   const here = list.filter((favorite) => holdsIn(favorite, space));
-  return [...here.filter((f) => f.pinned), ...here.filter((f) => !f.pinned)];
+  const shown = header.flatMap((id) => here.filter((f) => f.id === id));
+  return { header: shown, others: here.filter((f) => !shown.includes(f)) };
 }
 
 /**
- * `list` after a row of the menu of `space` is dragged. The menu is its rows
- * with the line between pinned and not in between: `from` and `to` count
- * that line as a row too, `to` being the place of the row once dropped.
- * A row above the line ends up in the header. The commands of other
- * spaces keep their places in `list`.
+ * The header of a tab after a row of its menu is dragged: the ids of the
+ * commands above the line, in their order. The menu is its rows with the
+ * line between header and not in between: `from` and `to` count that line
+ * as a row too, `to` being the place of the row once dropped.
  */
 export function rearrange(
   list: Favorite[],
   space: number | null,
+  header: number[],
   from: number,
   to: number,
-): Favorite[] {
-  const menu = menuOf(list, space);
-  const pinned = menu.filter((f) => f.pinned).length;
+): number[] {
+  const menu = menuOf(list, space, header);
   const LINE = null;
-  const rows: (Favorite | null)[] = [...menu.slice(0, pinned), LINE, ...menu.slice(pinned)];
-  if (rows[from] === LINE || from === to) return list;
+  const rows: (Favorite | null)[] = [...menu.header, LINE, ...menu.others];
+  if (rows[from] === LINE || from === to) return menu.header.map((f) => f.id);
   const [moved] = rows.splice(from, 1);
   rows.splice(to, 0, moved);
-  const line = rows.indexOf(LINE);
-  const arranged = rows
-    .filter((row): row is Favorite => row !== LINE)
-    .map((favorite) => ({ ...favorite, pinned: rows.indexOf(favorite) < line }));
-
-  // The places these commands had in `list`, filled in their new order.
-  const result = [...list];
-  const places = list.flatMap((favorite, index) => (menu.includes(favorite) ? [index] : []));
-  places.forEach((place, i) => {
-    result[place] = arranged[i];
-  });
-  return result;
+  return rows.slice(0, rows.indexOf(LINE)).flatMap((row) => (row ? [row.id] : []));
 }
 
 export function load(): Promise<Favorite[]> {
@@ -109,22 +103,17 @@ export class FavoriteStore {
     return this.items.some((f) => f.command === command && holdsIn(f, space));
   }
 
-  /** Adds `favorite` at the end of those in the header, or of the others. */
-  add(favorite: Favorite): void {
-    this.items = [...this.items, favorite];
+  /** Saves a command: in no header yet, every tab puts it in its own. */
+  add(favorite: Omit<Favorite, "id">): Favorite {
+    const id = this.items.reduce((max, f) => Math.max(max, f.id), 0) + 1;
+    const saved = { ...favorite, id };
+    this.items = [...this.items, saved];
     this.changed();
+    return saved;
   }
 
   remove(favorite: Favorite): void {
     this.items = this.items.filter((f) => f !== favorite);
-    this.changed();
-  }
-
-  /** Applies a drag in the menu of `space`: see `rearrange`. */
-  move(space: number | null, from: number, to: number): void {
-    const next = rearrange(this.items, space, from, to);
-    if (next === this.items) return;
-    this.items = next;
     this.changed();
   }
 

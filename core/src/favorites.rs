@@ -1,6 +1,6 @@
 //! The saved commands: a name and a command, for one space or for every
-//! one. The header shows those of the space of the tab and those for every
-//! space; the palette lists them.
+//! one. Which of them a tab has in its header, and in what order, is the
+//! tab's own: it is kept with the tab, in the state. The palette lists them.
 //!
 //! The app writes this file and reads it back, in the order they are shown;
 //! it is short and readable, to carry to another machine. It lives next to
@@ -18,7 +18,7 @@ use crate::{
     state::write_private,
 };
 
-/// Every saved command, in the order of the header and the menu.
+/// Every saved command, in the order they were saved.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Favorites {
@@ -28,25 +28,37 @@ pub struct Favorites {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Favorite {
+    /// What the tabs name it by in the state. `0` in a file written by hand:
+    /// `load` gives it one.
+    #[serde(default)]
+    pub id: u32,
     pub name: String,
     pub command: String,
     /// The id of the space it is for; `None`: every space, and the tabs
     /// that are in none.
     #[serde(default)]
     pub space: Option<u32>,
-    /// Shown as a chip in the header, not only in the menu.
-    #[serde(default)]
-    pub pinned: bool,
 }
 
 /// Reads the file at `path`. A missing file is no saved command; one that
-/// is there but cannot be read is `Error::State`.
+/// is there but cannot be read is `Error::State`. A command without an id,
+/// or with one another has, gets a new one.
 pub fn load(path: &Path) -> Result<Favorites> {
-    match fs::read_to_string(path) {
-        Ok(text) => toml::from_str(&text).map_err(|e| Error::State(e.to_string())),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Favorites::default()),
-        Err(e) => Err(e.into()),
+    let mut favorites: Favorites = match fs::read_to_string(path) {
+        Ok(text) => toml::from_str(&text).map_err(|e| Error::State(e.to_string()))?,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Favorites::default()),
+        Err(e) => return Err(e.into()),
+    };
+    let mut next = favorites.favorites.iter().map(|f| f.id).max().unwrap_or(0);
+    let mut seen = std::collections::HashSet::new();
+    for favorite in &mut favorites.favorites {
+        if favorite.id == 0 || !seen.insert(favorite.id) {
+            next += 1;
+            favorite.id = next;
+            seen.insert(next);
+        }
     }
+    Ok(favorites)
 }
 
 /// Writes `favorites` to `path`, whole: see `state::write_private`.
@@ -76,16 +88,16 @@ mod tests {
         Favorites {
             favorites: vec![
                 Favorite {
+                    id: 1,
                     name: "Dev".into(),
                     command: "pnpm dev".into(),
                     space: Some(3),
-                    pinned: true,
                 },
                 Favorite {
+                    id: 2,
                     name: "Pull".into(),
                     command: "git pull --rebase".into(),
                     space: None,
-                    pinned: false,
                 },
             ],
         }
@@ -111,18 +123,19 @@ mod tests {
         assert!(matches!(load(&path), Err(Error::State(_))));
     }
 
-    // Written by hand: the fields left out take their default.
+    // Written by hand: no space is every space, and the ids are given.
     #[test]
-    fn a_short_entry_is_for_every_space_and_not_pinned() {
+    fn short_entries_are_for_every_space_and_get_ids() {
         let path = temp_path("short");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(
-            &path,
-            "[[favorite]]\nname = \"Up\"\ncommand = \"docker compose up\"\n",
-        )
-        .unwrap();
-        let favorite = &load(&path).unwrap().favorites[0];
-        assert_eq!((favorite.space, favorite.pinned), (None, false));
+        let text = "[[favorite]]\nid = 4\nname = \"Up\"\ncommand = \"up\"\n\n\
+                    [[favorite]]\nname = \"Down\"\ncommand = \"down\"\n\n\
+                    [[favorite]]\nid = 4\nname = \"Logs\"\ncommand = \"logs\"\n";
+        fs::write(&path, text).unwrap();
+        let favorites = load(&path).unwrap().favorites;
+        assert_eq!(favorites[0].space, None);
+        let ids: Vec<u32> = favorites.iter().map(|f| f.id).collect();
+        assert_eq!(ids, [4, 5, 6]);
     }
 
     #[cfg(unix)]
