@@ -18,7 +18,7 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 - **Mouse and focus reporting** for the programs that ask for them (vim, htop, tmux). Hold Shift to select text anyway.
 - **Unicode**: wide characters and combining marks, with glyphs from fallback fonts kept inside their cells.
 - **Saved commands**, for one space or global, run with a click. Each tab has its own chips in the header, in the order you drag them to; the others are in the menu next to them, where each one can be edited, made global or of the space, or deleted.
-- **Command blocks**, from the marks of the shell integration: a mark in the margin at each prompt, green or red as its command ended, `Cmd+↑` and `Cmd+↓` to go from one prompt to the next, and the output of the last command to copy or select from the palette.
+- **Command blocks**, from the marks of the shell integration: `Cmd+↑` and `Cmd+↓` go from one prompt to the next, and the output of the last command can be copied or selected from the palette.
 - **A palette** for the commands run before, the saved ones and the actions. The settings of a space (name, color, folder, shell) are among the actions: `@space` keeps only those, and the space menu opens the palette on them.
 - **A config file** for the font and the theme colors.
 

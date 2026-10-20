@@ -652,49 +652,6 @@ body.collapsed .header-space.open {
   display: none;
 }
 
-/* Left of the canvas, in the padding of the terminal: a mark at each
-   prompt whose command was run, in the color of how it went. */
-.prompt-marks {
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 0;
-  width: 14px;
-  pointer-events: none;
-}
-
-.prompt-marks[hidden] {
-  display: none;
-}
-
-.prompt-mark {
-  position: absolute;
-  left: 5px;
-  width: 3px;
-  box-sizing: border-box;
-  border-top: 3px solid transparent;
-  border-bottom: 3px solid transparent;
-  background-clip: padding-box;
-  border-radius: 2px;
-  pointer-events: auto;
-}
-
-.prompt-mark.running {
-  background-color: var(--accent);
-}
-
-.prompt-mark.ok {
-  background-color: #1f9a6a;
-}
-
-.prompt-mark.failed {
-  background-color: var(--danger);
-}
-
-.prompt-mark.ended {
-  background-color: #b8c2bd;
-}
-
 /* A command that was running when the tab closed, offered to start again:
    over the top of the terminal, out of the way of the prompt below. */
 #offer {

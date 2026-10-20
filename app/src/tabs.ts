@@ -15,7 +15,6 @@ import {
   resizeTab,
   runsByItself,
   setTabSpace,
-  showTab,
   type Tab,
   type TabHandlers,
   type TabStart,
@@ -781,7 +780,7 @@ export class Tabs {
     if (place !== null) return;
     if (this.active) focusTab(this.active, false);
     this.active = null;
-    for (const entry of this.entries) showTab(entry.tab, false);
+    for (const entry of this.entries) entry.tab.canvas.hidden = true;
     this.options.onActiveChange(null);
   }
 
@@ -791,7 +790,7 @@ export class Tabs {
     this.active = tab;
     for (const entry of this.entries) {
       const isActive = entry.tab === tab;
-      showTab(entry.tab, isActive);
+      entry.tab.canvas.hidden = !isActive;
       entry.row.classList.toggle("active", isActive);
       if (isActive) this.lastTab.set(entry.space, tab);
     }

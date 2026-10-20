@@ -758,10 +758,9 @@ mod tests {
         wait_for_event(&rx, SessionEvent::CommandEnd(Some(2)));
     }
 
-    // The prompts reach the frames with how their commands went, and the
-    // output of the last one can be read back.
+    // Once a command ended, its output can be read back.
     #[test]
-    fn prompts_and_output_of_the_shell() {
+    fn the_output_of_the_last_command_of_the_shell() {
         let mut cmd = CommandBuilder::new("sh");
         cmd.args([
             "-c",
@@ -769,12 +768,7 @@ mod tests {
         ]);
         let (session, rx) = spawn_with_channel(cmd);
 
-        let frame = wait_for_frame(&rx, |f| f.prompts.len() == 2);
-        assert_eq!(frame.prompts[0].row, 0);
-        assert_eq!(
-            frame.prompts[0].state,
-            crate::emulator::BlockState::Ended(Some(2))
-        );
+        wait_for_event(&rx, SessionEvent::CommandEnd(Some(2)));
         assert_eq!(session.last_output().as_deref(), Some("oops"));
     }
 

@@ -877,8 +877,11 @@ fn block(cmd: &str, output: &str, status: i32) -> String {
 const PROMPT: &str = "\x1b]133;A\x07$ \x1b]133;B\x07";
 
 fn prompts(emulator: &mut Emulator) -> Vec<(u16, BlockState)> {
-    let frame = emulator.frame().expect("a frame");
-    frame.prompts.iter().map(|p| (p.row, p.state)).collect()
+    emulator
+        .prompts_on_screen()
+        .iter()
+        .map(|p| (p.row, p.state))
+        .collect()
 }
 
 // Each prompt on screen, with how its command ended; the one waiting too.

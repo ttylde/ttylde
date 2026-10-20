@@ -5,7 +5,7 @@ import { defaultLook, type Look } from "./look";
 import { attachMouse } from "./mouse";
 import { fontStack, Renderer } from "./renderer";
 import { ended, READY, started, type TabStatus } from "./status";
-import type { Font, GitStatus, PromptMark, SessionEvent } from "./types";
+import type { Font, GitStatus, SessionEvent } from "./types";
 
 /** One session with the canvas it is drawn on. */
 export type Tab = {
@@ -40,8 +40,6 @@ export type Tab = {
   /** Background of the last frame, `null` before the first one. */
   background: number | null;
   canvas: HTMLCanvasElement;
-  /** Beside the canvas, in the margin: a mark at each prompt. */
-  marks: HTMLElement;
   renderer: Renderer;
   exited: boolean;
   /** The program asked for mouse events: they go to it, not to selection. */
@@ -87,12 +85,6 @@ export async function openTab(
   canvas.className = "screen";
   canvas.hidden = true;
   container.appendChild(canvas);
-  // In the padding of the terminal, left of the canvas: out of `container`,
-  // which cuts what goes past its edges.
-  const marks = document.createElement("div");
-  marks.className = "prompt-marks";
-  marks.hidden = true;
-  (container.parentElement ?? container).appendChild(marks);
 
   const renderer = new Renderer(canvas, fontStack(font.family), font.size);
   const size = renderer.fit(container.clientWidth, container.clientHeight);
@@ -110,7 +102,6 @@ export async function openTab(
     look: defaultLook(),
     background: null,
     canvas,
-    marks,
     renderer,
     exited: false,
     mouse: false,
@@ -123,7 +114,6 @@ export async function openTab(
       case "Frame":
         tab.mouse = event.data.mouse;
         renderer.apply(event.data);
-        drawMarks(marks, event.data.prompts, renderer.cellHeightCss());
         if (event.data.background !== tab.background) {
           tab.background = event.data.background;
           handlers.onBackground(tab);
@@ -180,7 +170,6 @@ export async function openTab(
     tab.id = await invoke<number>("session_open", { ...size, ...start, onEvent });
   } catch (error) {
     canvas.remove();
-    marks.remove();
     throw error;
   }
   attachMouse(canvas, textarea, renderer, tab.id, () => tab.mouse, tab.abort.signal);
@@ -233,14 +222,7 @@ export function setTabSpace(tab: Tab, space: number | null): void {
 export function closeTab(tab: Tab): void {
   tab.abort.abort();
   tab.canvas.remove();
-  tab.marks.remove();
   if (tab.id >= 0) void invoke("session_close", { id: tab.id });
-}
-
-/** Shows the canvas of `tab` and its marks, or hides them. */
-export function showTab(tab: Tab, shown: boolean): void {
-  tab.canvas.hidden = !shown;
-  tab.marks.hidden = !shown;
 }
 
 /**
@@ -283,29 +265,6 @@ export function resizeTab(tab: Tab, width: number, height: number): void {
  */
 export function focusTab(tab: Tab, focused: boolean): void {
   if (tab.id >= 0) void invoke("session_focus", { id: tab.id, focused });
-}
-
-// A mark in the margin at each prompt on screen whose command was run: blue
-// while it runs, green or red as it ended, grey when the shell did not say.
-function drawMarks(marks: HTMLElement, prompts: PromptMark[], rowHeight: number): void {
-  const shown = prompts.flatMap((prompt) => {
-    if (prompt.state === "waiting") return [];
-    const mark = document.createElement("span");
-    if (prompt.state === "running") {
-      mark.className = "prompt-mark running";
-      mark.title = "Running";
-    } else if (prompt.status === null) {
-      mark.className = "prompt-mark ended";
-      mark.title = "Ended";
-    } else {
-      mark.className = `prompt-mark ${prompt.status === 0 ? "ok" : "failed"}`;
-      mark.title = `Exit ${prompt.status}`;
-    }
-    mark.style.top = `${prompt.row * rowHeight}px`;
-    mark.style.height = `${rowHeight}px`;
-    return [mark];
-  });
-  marks.replaceChildren(...shown);
 }
 
 // Visual bell: the screen flashes for a moment. A bell that rings while

@@ -25,16 +25,7 @@ export type Frame = {
   history: number;
   /** The program asked for mouse events. */
   mouse: boolean;
-  /** The prompts that start on screen, and how their commands went. */
-  prompts: PromptMark[];
 };
-
-/** Mirror of `PromptMark` in core/src/emulator/blocks.rs. */
-export type PromptMark = { row: number } & (
-  | { state: "waiting" }
-  | { state: "running" }
-  | { state: "ended"; status: number | null }
-);
 
 /** Mirror of `Font` in core/src/config.rs. */
 export type Font = { family: string; size: number };

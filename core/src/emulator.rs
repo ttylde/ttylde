@@ -163,6 +163,11 @@ impl Emulator {
         }
     }
 
+    /// The prompts that start on screen, and how their commands went.
+    pub fn prompts_on_screen(&self) -> Vec<PromptMark> {
+        self.blocks.on_screen(&self.term)
+    }
+
     /// Scrolls to the prompt above the first line shown, or below it.
     /// Returns whether the view moved.
     pub fn jump_to_prompt(&mut self, up: bool) -> bool {
@@ -428,7 +433,6 @@ impl Emulator {
             offset: self.display_offset() as u32,
             history: self.term.grid().history_size() as u32,
             mouse: self.input_mode().mouse != MouseTracking::Off,
-            prompts: self.blocks.on_screen(&self.term),
         })
     }
 
