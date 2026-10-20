@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { COLORS, cleanName, defaultLook, ICONS, popoverTop } from "./look";
+import { COLORS, cleanName, defaultLook, ICONS, iconName, popoverTop } from "./look";
 
 describe("defaultLook", () => {
   test("has no name and picks from the lists", () => {
@@ -18,6 +18,20 @@ describe("defaultLook", () => {
   // Editing the look of one tab must not change the others.
   test("is a new object every time", () => {
     expect(defaultLook()).not.toBe(defaultLook());
+  });
+});
+
+// A tab saved with an icon of Lucide gets the one of Untitled UI in its place.
+describe("iconName", () => {
+  test("an icon of before becomes the one that took its place", () => {
+    expect(iconName("server")).toBe("server-01");
+    expect(iconName("house")).toBe("home-02");
+    expect(ICONS).toContain(iconName("square-terminal"));
+  });
+
+  test("an icon of now stays as it is", () => {
+    expect(iconName("terminal")).toBe("terminal");
+    expect(iconName("cube-02")).toBe("cube-02");
   });
 });
 

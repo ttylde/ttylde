@@ -1,7 +1,7 @@
 import { closeForm } from "./form";
 import { PIN_ICON, RENAME_ICON } from "./icons";
 import { folderName } from "./label";
-import { iconMarkup, type Look } from "./look";
+import { iconMarkup, iconName, type Look } from "./look";
 import { closeMenu, openMenu } from "./menu";
 import { openRename } from "./rename";
 import { dropIndex, makeRoom } from "./reorder";
@@ -1118,10 +1118,11 @@ function toSaved({ look, cwd, command, restart, favorites }: Kept): SavedTab {
   return { ...look, cwd, command, restart, favorites };
 }
 
-// A file from before the commands were kept has none.
+// A file from before the commands were kept has none; one from before the
+// icons of Untitled UI names those of Lucide.
 function fromSaved({ cwd, command, restart, favorites, ...look }: SavedTab): Kept {
   return {
-    look,
+    look: { ...look, icon: iconName(look.icon) },
     cwd,
     command: command ?? null,
     restart: restart ?? null,

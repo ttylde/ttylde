@@ -1,4 +1,4 @@
-import { TAB_ICONS } from "./lucide/icons";
+import { FORMER_NAMES, TAB_ICONS } from "./untitled/icons";
 
 /** What the user chose for a tab: it wins over what the program says. */
 export type Look = {
@@ -19,6 +19,14 @@ export const COLOR_ROWS = [
 export const COLORS = COLOR_ROWS.flat();
 /** The icons a tab can have, by name. */
 export const ICONS = Object.keys(TAB_ICONS);
+
+/**
+ * The icon `name` is now: a tab saved with an icon of before, from Lucide,
+ * gets the one that took its place.
+ */
+export function iconName(name: string): string {
+  return FORMER_NAMES[name] ?? name;
+}
 
 /** The `<svg>` of the icon called `name`; the first one for a name nobody knows. */
 export function iconMarkup(name: string): string {
