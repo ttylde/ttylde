@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+use crate::emulator::PromptMark;
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Frame {
     pub cols: u16,
@@ -12,6 +14,8 @@ pub struct Frame {
     pub offset: u32,
     pub history: u32,
     pub mouse: bool,
+    /// The prompts that start on screen, and how their commands went.
+    pub prompts: Vec<PromptMark>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

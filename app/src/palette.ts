@@ -41,6 +41,12 @@ export type PaletteOptions = {
   reopen(index: number): void;
   editSpace(changes: SpaceChanges): void;
   deleteSpace(): void;
+  /** Whether a tab is shown: the actions on its output need one. */
+  hasTab(): boolean;
+  /** The output of the last command of the tab shown, to the clipboard. */
+  copyLastOutput(): void;
+  /** The output of the last command of the tab shown, selected. */
+  selectLastOutput(): void;
   toast(text: string): void;
   /** The palette closed: the keyboard goes back where it was. */
   onClose(): void;
@@ -587,6 +593,20 @@ export class Palette {
               hint: "",
               space: true,
               run: () => this.options.closeSpace(),
+            },
+          ]
+        : []),
+      ...(this.options.hasTab()
+        ? [
+            {
+              label: "Copy output of the last command",
+              hint: "",
+              run: () => this.options.copyLastOutput(),
+            },
+            {
+              label: "Select output of the last command",
+              hint: "",
+              run: () => this.options.selectLastOutput(),
             },
           ]
         : []),

@@ -22,7 +22,15 @@ import { isSaveCommandOpen, openSaveCommand } from "./save-command";
 import { ACTIONS_HINT, actionOf, NEW_TAB_HINT, PALETTE_HINT } from "./shortcuts";
 import type { Space } from "./space";
 import { ago, tabCount } from "./space";
-import { defaultTitle, type Tab, titleOf, typeCommand } from "./tab";
+import {
+  defaultTitle,
+  jumpToPrompt,
+  lastOutput,
+  selectLastOutput,
+  type Tab,
+  titleOf,
+  typeCommand,
+} from "./tab";
 import { Tabs } from "./tabs";
 import { toast } from "./toast";
 import type { Font, SavedState } from "./types";
@@ -325,12 +333,37 @@ const palette = new Palette({
   reopen: (index) => void tabs.selectSpace(index),
   editSpace: (changes) => tabs.editSpace(changes),
   deleteSpace,
+  hasTab: () => tabs.activeTab() !== null,
+  copyLastOutput: () => void copyLastOutput(),
+  selectLastOutput: () => void selectOutput(),
   toast,
   onClose: () => {
     if (tabs.activeTab()) keyboard.focus();
     else launcher.focus();
   },
 });
+
+// The output of the last command of the tab shown, on the clipboard.
+async function copyLastOutput(): Promise<void> {
+  const tab = tabs.activeTab();
+  const text = tab ? await lastOutput(tab) : null;
+  if (text === null) {
+    toast("No output of a command to copy");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Output copied");
+  } catch (error) {
+    console.error("copy failed:", error);
+  }
+}
+
+// The output of the last command of the tab shown, selected for Cmd+C.
+async function selectOutput(): Promise<void> {
+  const tab = tabs.activeTab();
+  if (!tab || !(await selectLastOutput(tab))) toast("No output of a command to select");
+}
 
 // Keys that are only modifiers, pressed on their own on the way to another.
 const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
@@ -474,6 +507,11 @@ window.addEventListener(
       case "palette":
         palette.open(action.tab);
         break;
+      case "jump-prompt": {
+        const tab = tabs.activeTab();
+        if (tab) jumpToPrompt(tab, action.up);
+        break;
+      }
       case "new-command":
         closeFavoritesMenu();
         saveCommand("", null);

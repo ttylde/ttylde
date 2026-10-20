@@ -12,7 +12,9 @@ export type Action =
   /** The palette, open on Recent or on Actions, as in VS Code. */
   | { type: "palette"; tab: "recent" | "actions" }
   /** The dialog of a new saved command. */
-  | { type: "new-command" };
+  | { type: "new-command" }
+  /** The prompt above the first line shown, or below it, to the top. */
+  | { type: "jump-prompt"; up: boolean };
 
 /** The parts of a `KeyboardEvent` a shortcut depends on. */
 export type KeyStroke = Pick<
@@ -62,6 +64,10 @@ export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
   }
   if (!hasAppModifier(e, mac)) return null;
   if (e.key.toLowerCase() === "t") return { type: "new-tab" };
+  // Cmd+Up and Cmd+Down, as Terminal.app; Ctrl+Shift with the arrows off macOS.
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    return { type: "jump-prompt", up: e.key === "ArrowUp" };
+  }
   if (e.key.toLowerCase() === "p") return { type: "palette", tab: mac ? "recent" : "actions" };
   if (!mac && e.key.toLowerCase() === "r") return { type: "palette", tab: "recent" };
   if (!mac && e.key.toLowerCase() === "s") return { type: "new-command" };

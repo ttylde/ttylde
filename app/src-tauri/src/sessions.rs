@@ -219,6 +219,26 @@ pub fn session_selection_text(
     state.with_session(id, |session| session.selection_text())
 }
 
+/// Cmd+Up / Cmd+Down: the prompt above (or below) the first line shown
+/// comes to the top of the view.
+#[tauri::command]
+pub fn session_jump_to_prompt(state: State<'_, Sessions>, id: u32, up: bool) -> Result<(), String> {
+    state.with_session(id, |session| session.jump_to_prompt(up))
+}
+
+/// The output of the last command run, ready for the clipboard. `None`: no
+/// command, or nothing printed still in the scrollback.
+#[tauri::command]
+pub fn session_last_output(state: State<'_, Sessions>, id: u32) -> Result<Option<String>, String> {
+    state.with_session(id, |session| session.last_output())
+}
+
+/// Selects the output of the last command run; `false`: there is none.
+#[tauri::command]
+pub fn session_select_last_output(state: State<'_, Sessions>, id: u32) -> Result<bool, String> {
+    state.with_session(id, |session| session.select_last_output())
+}
+
 /// Removes the session from the registry: its `Drop` kills the shell.
 #[tauri::command]
 pub fn session_close(state: State<'_, Sessions>, id: u32) {

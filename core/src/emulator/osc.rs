@@ -12,6 +12,9 @@ pub(super) enum Announcement {
     Location(Location),
     /// OSC 133, or VS Code's OSC 633: prompts and commands.
     Mark(Mark),
+    /// `133;B`: the prompt ends, what follows is typed. Only where it falls
+    /// in the grid matters: see `blocks`.
+    Typed,
 }
 
 #[derive(Default)]
@@ -24,6 +27,16 @@ pub(super) struct OscWatcher {
 impl OscWatcher {
     pub(super) fn take(&mut self) -> Vec<Announcement> {
         std::mem::take(&mut self.announcements)
+    }
+
+    /// How many announcements wait to be taken.
+    pub(super) fn len(&self) -> usize {
+        self.announcements.len()
+    }
+
+    /// The announcements from the `from`th on.
+    pub(super) fn since(&self, from: usize) -> &[Announcement] {
+        &self.announcements[from..]
     }
 
     /// The text of a command, if the sequence that carries it also carries
@@ -80,6 +93,7 @@ impl Perform for OscWatcher {
                     self.announcements.push(Announcement::Location(location));
                 }
             }
+            [b"133" | b"633", b"B", ..] => self.announcements.push(Announcement::Typed),
             [code @ (b"133" | b"633"), kind, rest @ ..] => {
                 if let Some(mark) = self.mark(kind, rest, *code == b"633") {
                     self.announcements.push(Announcement::Mark(mark));
