@@ -46,6 +46,19 @@ describe("actionOf", () => {
     expect(actionOf(stroke({ key: "p", code: "KeyP", ctrlKey: true }), true)).toBeNull();
   });
 
+  // A new saved command: Cmd+Shift+S, Ctrl+Shift+S off macOS. Cmd+S
+  // alone is not one.
+  test("Cmd+Shift+S opens a new saved command", () => {
+    const command = { type: "new-command" };
+    expect(
+      actionOf(stroke({ key: "S", code: "KeyS", metaKey: true, shiftKey: true }), true),
+    ).toEqual(command);
+    expect(
+      actionOf(stroke({ key: "S", code: "KeyS", ctrlKey: true, shiftKey: true }), false),
+    ).toEqual(command);
+    expect(actionOf(stroke({ key: "s", code: "KeyS", metaKey: true }), true)).toBeNull();
+  });
+
   // Digits select tabs by position, counting from one.
   test("Cmd+1..9 select a tab on macOS", () => {
     const first = actionOf(stroke({ key: "1", code: "Digit1", metaKey: true }), true);

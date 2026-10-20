@@ -1081,6 +1081,15 @@ body.collapsed #toggle-sidebar:hover {
   z-index: 30;
 }
 
+/* A menu over another popup: the menu of a saved command. */
+.popover-backdrop.over {
+  z-index: 36;
+}
+
+.popover.over {
+  z-index: 37;
+}
+
 .popover {
   position: fixed;
   z-index: 31;
@@ -1888,7 +1897,8 @@ body.no-space #space-dot .dot {
   color: var(--muted);
 }
 
-.favorites-row.pinned .favorites-name {
+.favorites-row.pinned .favorites-name,
+.favorites-row.global .favorites-name {
   color: var(--ink);
 }
 
@@ -1901,8 +1911,16 @@ body.no-space #space-dot .dot {
   text-overflow: ellipsis;
 }
 
+.favorites-global {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  color: var(--accent);
+}
+
 .favorites-run,
-.favorites-remove {
+.favorites-more {
   display: grid;
   flex: none;
   place-items: center;
@@ -1926,13 +1944,14 @@ body.no-space #space-dot .dot {
   color: #123dba;
 }
 
-.favorites-remove {
+.favorites-more {
   color: #93a19b;
 }
 
-.favorites-remove:hover {
-  background: var(--hover);
-  color: var(--danger);
+.favorites-more:hover,
+.favorites-more.open {
+  background: rgba(21, 33, 28, 0.06);
+  color: var(--ink);
 }
 
 .favorites-line {
@@ -1986,18 +2005,22 @@ body.no-space #space-dot .dot {
   display: flex;
 }
 
+.favorites-save-label {
+  white-space: nowrap;
+}
+
+.favorites-key {
+  margin-left: auto;
+  color: #8a9a93;
+  font: 11px var(--mono);
+}
+
 .favorites-last {
   min-width: 0;
   overflow: hidden;
   font: 11px var(--mono);
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.favorites-hint {
-  padding: 4px 10px 6px;
-  color: var(--muted);
-  font-size: 10.5px;
 }
 
 /* The dialog that saves a command. */

@@ -33,24 +33,46 @@ export function holdsIn(favorite: Favorite, space: number | null): boolean {
 
 /**
  * The saved commands a tab of `space` has, split as its menu lists them:
- * those in its header, in the order of `header` (the ids the tab keeps),
- * then the others, in the order they were saved.
+ * those of the space in its header, in the order of `header` (the ids the
+ * tab keeps), then the other ones of the space, then the global ones, in
+ * the order they were saved. A global one is everywhere: it has no place
+ * among those of a space, and is not dragged.
  */
 export function menuOf(
   list: Favorite[],
   space: number | null,
   header: number[],
-): { header: Favorite[]; others: Favorite[] } {
-  const here = list.filter((favorite) => holdsIn(favorite, space));
-  const shown = header.flatMap((id) => here.filter((f) => f.id === id));
-  return { header: shown, others: here.filter((f) => !shown.includes(f)) };
+): { header: Favorite[]; others: Favorite[]; globals: Favorite[] } {
+  const own = space === null ? [] : list.filter((favorite) => favorite.space === space);
+  const shown = header.flatMap((id) => own.filter((f) => f.id === id));
+  return {
+    header: shown,
+    others: own.filter((f) => !shown.includes(f)),
+    globals: list.filter((f) => f.space === null),
+  };
+}
+
+/**
+ * The chips of the header of a tab: first those of its space, in its
+ * order, then the global ones it has, in the order they were put there.
+ */
+export function pinnedOf(list: Favorite[], space: number | null, header: number[]): Favorite[] {
+  const menu = menuOf(list, space, header);
+  const globals = header.flatMap((id) => menu.globals.filter((f) => f.id === id));
+  return [...menu.header, ...globals];
+}
+
+/** The header of a tab once `id` is put in it, or taken out if it is there. */
+export function toggled(header: number[], id: number): number[] {
+  return header.includes(id) ? header.filter((other) => other !== id) : [...header, id];
 }
 
 /**
  * The header of a tab after a row of its menu is dragged: the ids of the
- * commands above the line, in their order. The menu is its rows with the
- * line between header and not in between: `from` and `to` count that line
- * as a row too, `to` being the place of the row once dropped.
+ * commands of the space above the line, in their order, then the global
+ * ones it had. The rows are those of the space with the line between
+ * header and not in between: `from` and `to` count that line as a row
+ * too, `to` being the place of the row once dropped.
  */
 export function rearrange(
   list: Favorite[],
@@ -60,12 +82,14 @@ export function rearrange(
   to: number,
 ): number[] {
   const menu = menuOf(list, space, header);
+  const globals = header.filter((id) => menu.globals.some((f) => f.id === id));
   const LINE = null;
   const rows: (Favorite | null)[] = [...menu.header, LINE, ...menu.others];
-  if (rows[from] === LINE || from === to) return menu.header.map((f) => f.id);
+  if (rows[from] === LINE || from === to) return [...menu.header.map((f) => f.id), ...globals];
   const [moved] = rows.splice(from, 1);
   rows.splice(to, 0, moved);
-  return rows.slice(0, rows.indexOf(LINE)).flatMap((row) => (row ? [row.id] : []));
+  const own = rows.slice(0, rows.indexOf(LINE)).flatMap((row) => (row ? [row.id] : []));
+  return [...own, ...globals];
 }
 
 export function load(): Promise<Favorite[]> {
@@ -112,8 +136,14 @@ export class FavoriteStore {
     return saved;
   }
 
+  /** Changes the command `id`: its name, command or space. */
+  update(id: number, fields: Omit<Favorite, "id">): void {
+    this.items = this.items.map((f) => (f.id === id ? { ...fields, id } : f));
+    this.changed();
+  }
+
   remove(favorite: Favorite): void {
-    this.items = this.items.filter((f) => f !== favorite);
+    this.items = this.items.filter((f) => f.id !== favorite.id);
     this.changed();
   }
 

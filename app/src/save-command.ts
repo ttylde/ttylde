@@ -4,7 +4,12 @@ import { BOOKMARK_ICON } from "./icons";
 export type SaveCommandOptions = {
   /** The command to save; empty: the user writes one. */
   command: string;
-  /** The space of the tab; `null`: none, it can only hold everywhere. */
+  /** The saved command to change, instead of saving a new one. */
+  editing?: Favorite;
+  /**
+   * The space it can be for: the one of the tab, or the one of the command
+   * changed; `null`: none, it can only be global.
+   */
   space: { id: number; name: string } | null;
   onSave(favorite: Omit<Favorite, "id">): void;
   /** The dialog is gone, saved or not. */
@@ -18,9 +23,10 @@ export function isSaveCommandOpen(): boolean {
 }
 
 /**
- * The dialog that saves a command: the command, its name (guessed from the
- * command until the user writes one), and where it holds, this space or
- * everywhere. Enter saves, Escape or a click outside does not.
+ * The dialog that saves a command, or changes a saved one: the command, its
+ * name (guessed from the command until the user writes one), and where it
+ * holds, the space or everywhere. Enter saves, Escape or a click outside
+ * does not.
  */
 export function openSaveCommand(options: SaveCommandOptions): void {
   open?.close();
@@ -31,7 +37,12 @@ export function openSaveCommand(options: SaveCommandOptions): void {
   icon.className = "save-icon";
   icon.innerHTML = BOOKMARK_ICON;
   const heading = document.createElement("b");
-  heading.textContent = options.command ? "Save command" : "New saved command";
+  const { editing } = options;
+  heading.textContent = editing
+    ? "Edit command"
+    : options.command
+      ? "Save command"
+      : "New saved command";
   title.append(icon, heading);
 
   const command = field("e.g. docker compose up -d", options.command);
@@ -42,8 +53,8 @@ export function openSaveCommand(options: SaveCommandOptions): void {
   dollar.textContent = "$";
   commandBox.append(dollar, command);
 
-  const name = field("e.g. Dev, Test, Migrate", guessName(options.command));
-  let named = false;
+  const name = field("e.g. Dev, Test, Migrate", editing?.name ?? guessName(options.command));
+  let named = editing !== undefined;
   command.addEventListener("input", () => {
     if (!named) name.value = guessName(command.value);
   });
@@ -51,11 +62,11 @@ export function openSaveCommand(options: SaveCommandOptions): void {
     named = true;
   });
 
-  let everywhere = options.space === null;
+  let everywhere = editing ? editing.space === null : options.space === null;
   const where = div("save-segments");
   const choices: [boolean, string][] = [
-    [false, options.space ? `This space · ${options.space.name}` : "This space"],
-    [true, "Everywhere"],
+    [false, options.space?.name ?? "This space"],
+    [true, "Global"],
   ];
   const segments = choices.map(([value, label]) => {
     const segment = document.createElement("button");
@@ -134,8 +145,9 @@ export function openSaveCommand(options: SaveCommandOptions): void {
       close();
     }
   });
-  (options.command ? name : command).focus();
-  (options.command ? name : command).select();
+  const first = options.command ? name : command;
+  first.focus();
+  first.select();
 }
 
 function div(className: string): HTMLElement {

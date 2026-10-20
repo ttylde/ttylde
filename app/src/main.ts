@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { type Favorite, FavoriteStore, menuOf } from "./favorites";
+import { type Favorite, FavoriteStore, menuOf, pinnedOf } from "./favorites";
 import {
   closeFavoritesMenu,
   isFavoritesMenuOpen,
@@ -130,6 +130,7 @@ const header = new Header({
       lastCommand: shown?.command ?? null,
       run: (favorite: Favorite) => runCommand(favorite.command),
       save: (command) => saveCommand(command, null),
+      edit: (favorite) => editCommand(favorite),
       onClose: () => {
         header.setFavoritesOpen(false);
         if (!isSaveCommandOpen()) keyboard.focus();
@@ -159,8 +160,11 @@ function showHeader(): void {
 // The saved commands `tab` has in its header, and how many are only in
 // its menu.
 function headerFavorites(tab: Tab): { favorites: Favorite[]; hidden: number } {
-  const menu = menuOf(favorites.list, shownSpace()?.id ?? null, tab.favorites);
-  return { favorites: menu.header, hidden: menu.others.length };
+  const space = shownSpace()?.id ?? null;
+  const pinned = pinnedOf(favorites.list, space, tab.favorites);
+  const menu = menuOf(favorites.list, space, tab.favorites);
+  const all = menu.header.length + menu.others.length + menu.globals.length;
+  return { favorites: pinned, hidden: all - pinned.length };
 }
 
 // Runs `command` in the tab shown; with none, a new one opens for it, as
@@ -191,11 +195,33 @@ function saveCommand(command: string, id: number | null): void {
       favorites.add(favorite);
       toast(`Saved · ${favorite.name}`);
     },
-    onClose: () => {
-      if (tabs.activeTab()) keyboard.focus();
-      else launcher.focus();
-    },
+    onClose: refocus,
   });
+}
+
+// The dialog that changes `favorite`: it can stay in its space, or the
+// one of the tab shown if it is global, or become global.
+function editCommand(favorite: Favorite): void {
+  const space =
+    favorite.space === null
+      ? shownSpace()
+      : (tabs.spaceList().find((info) => info.space.id === favorite.space)?.space ?? null);
+  openSaveCommand({
+    command: favorite.command,
+    editing: favorite,
+    space,
+    onSave: (fields) => {
+      favorites.update(favorite.id, fields);
+      toast(`Saved · ${fields.name}`);
+    },
+    onClose: refocus,
+  });
+}
+
+// After a dialog: the keys go back to the tab, or to the launcher.
+function refocus(): void {
+  if (tabs.activeTab()) keyboard.focus();
+  else launcher.focus();
 }
 
 const tabs = new Tabs({
@@ -447,6 +473,10 @@ window.addEventListener(
         break;
       case "palette":
         palette.open(action.tab);
+        break;
+      case "new-command":
+        closeFavoritesMenu();
+        saveCommand("", null);
         break;
     }
   },

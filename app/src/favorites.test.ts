@@ -1,6 +1,14 @@
 import { describe, expect, test } from "vitest";
 
-import { type Favorite, guessName, holdsIn, menuOf, rearrange } from "./favorites";
+import {
+  type Favorite,
+  guessName,
+  holdsIn,
+  menuOf,
+  pinnedOf,
+  rearrange,
+  toggled,
+} from "./favorites";
 
 const fav = (id: number, name: string, space: number | null): Favorite => ({
   id,
@@ -33,35 +41,49 @@ describe("favorites", () => {
 
   test("the header of a tab is in its own order, the others in the order saved", () => {
     const menu = menuOf(list, 1, [4, 2]);
-    expect(names(menu.header)).toEqual(["D", "B"]);
+    expect(names(menu.header)).toEqual(["B"]);
     expect(names(menu.others)).toEqual(["A"]);
+    expect(names(menu.globals)).toEqual(["D"]);
+  });
+
+  // The chips: those of the space first, then the global ones.
+  test("the header shows those of the space, then the global ones", () => {
+    expect(names(pinnedOf(list, 1, [4, 2]))).toEqual(["B", "D"]);
+    // A tab in no space has only the global ones.
+    expect(names(pinnedOf(list, null, [2, 4]))).toEqual(["D"]);
   });
 
   // A tab of space 1 cannot have C, of space 2, nor one deleted.
   test("ids of commands that do not hold, or are gone, are left out", () => {
-    expect(names(menuOf(list, 1, [3, 9, 1]).header)).toEqual(["A"]);
+    expect(names(pinnedOf(list, 1, [3, 9, 1]))).toEqual(["A"]);
   });
 
-  // Menu of space 1 with header [D, B]: D B | A — the line is row 2.
+  test("a command goes in the header, and out of it", () => {
+    expect(toggled([2], 4)).toEqual([2, 4]);
+    expect(toggled([2, 4], 2)).toEqual([4]);
+  });
+
+  // Rows of space 1 with header [B, D]: B | A — the line is row 1.
   test("a row dragged above the line goes in the header", () => {
-    expect(rearrange(list, 1, [4, 2], 3, 0)).toEqual([1, 4, 2]);
+    expect(rearrange(list, 1, [2, 4], 2, 0)).toEqual([1, 2, 4]);
   });
 
   test("a row dragged below the line leaves the header", () => {
-    expect(rearrange(list, 1, [4, 2], 0, 3)).toEqual([2]);
+    expect(rearrange(list, 1, [2, 4], 0, 2)).toEqual([4]);
   });
 
   test("the order changes among those in the header", () => {
-    expect(rearrange(list, 1, [4, 2], 1, 0)).toEqual([2, 4]);
+    const three = [...list, fav(5, "E", 1)];
+    expect(rearrange(three, 1, [2, 5, 4], 1, 0)).toEqual([5, 2, 4]);
   });
 
   test("the line itself does not move", () => {
-    expect(rearrange(list, 1, [4, 2], 2, 0)).toEqual([4, 2]);
+    expect(rearrange(list, 1, [2, 4], 1, 0)).toEqual([2, 4]);
   });
 
   test("a new tab starts with nothing in its header", () => {
     const menu = menuOf(list, 1, []);
     expect(menu.header).toEqual([]);
-    expect(names(menu.others)).toEqual(["A", "B", "D"]);
+    expect(names(menu.others)).toEqual(["A", "B"]);
   });
 });

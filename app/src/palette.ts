@@ -534,7 +534,7 @@ export class Palette {
     row.append(element("span", "palette-name", favorite.name));
     const when = element("span", "palette-when");
     const where =
-      favorite.space === null ? "everywhere" : (this.options.spaceName(favorite.space) ?? "");
+      favorite.space === null ? "global" : (this.options.spaceName(favorite.space) ?? "");
     when.append(element("span", "palette-where", where));
     row.append(when);
     const remove = document.createElement("button");
