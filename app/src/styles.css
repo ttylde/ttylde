@@ -1212,7 +1212,86 @@ body.collapsed #toggle-sidebar:hover {
 
 /* Room for eight icons a row, all of them in sight. */
 .form.rename {
+  gap: 0;
   width: 284px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+/* On top, the tab as it will look: its icon, big, its name, its folder. */
+.rename-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 14px 12px;
+  background: linear-gradient(180deg, rgba(21, 33, 28, 0.035), rgba(21, 33, 28, 0));
+}
+
+.rename-preview {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  color: var(--tab-color);
+}
+
+.form.rename .rename-preview .line-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.rename-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rename-folder {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rename-folder:empty {
+  display: none;
+}
+
+.rename-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 14px 14px;
+}
+
+.rename-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* The title of a part, and on its right the value picked. */
+.rename-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+  color: var(--faint);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rename-value {
+  font: 11px var(--mono);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .field {
@@ -1235,57 +1314,99 @@ body.collapsed #toggle-sidebar:hover {
   box-shadow: 0 0 0 3px rgba(36, 102, 255, 0.22);
 }
 
+.form.rename .field {
+  min-width: 0;
+  padding: 2px 0 4px;
+  border: 0;
+  border-bottom: 1px solid rgba(21, 33, 28, 0.14);
+  border-radius: 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.form.rename .field:focus {
+  border-bottom-color: var(--accent);
+  box-shadow: none;
+}
+
 /* The colors to pick from, a row each. */
 .swatch-rows {
   display: flex;
   flex-direction: column;
   gap: 7px;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgba(21, 33, 28, 0.035);
 }
 
 .swatches {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
 }
 
-/* Eight icons a row; the rest are a scroll away. */
+/* Eight icons a row, as wide as the form. */
 .glyphs {
   display: grid;
-  grid-template-columns: repeat(8, 28px);
+  grid-template-columns: repeat(8, 1fr);
   gap: 2px;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgba(21, 33, 28, 0.035);
 }
 
 .form .swatch {
-  width: 18px;
-  height: 18px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(21, 33, 28, 0.08);
+  /* The check shows on the one picked only. */
+  color: transparent;
+  transition: transform 0.12s;
+}
+
+.form .swatch:hover {
+  transform: scale(1.12);
 }
 
 .form .swatch.picked {
   box-shadow:
     0 0 0 2px var(--panel),
-    0 0 0 4px var(--ink);
+    0 0 0 3.5px var(--swatch);
+  color: #fff;
+  transform: scale(1.08);
 }
 
-/* The icons a tab can have, in the color picked for it. */
+/* The icons a tab can have, grey; the one picked in the color picked. */
 .form .glyph {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  aspect-ratio: 1;
   padding: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: none;
-  color: var(--tab-color);
+  color: var(--muted);
+}
+
+.form.rename .glyph .line-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .form .glyph:hover {
-  background: var(--hover);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
 }
 
 .form .glyph.picked {
-  background: rgba(36, 102, 255, 0.14);
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(21, 33, 28, 0.12),
+    0 0 0 1.5px var(--tab-color);
+  color: var(--tab-color);
 }
 
 /* Off-screen but focusable: it receives the keyboard instead of the canvas. */

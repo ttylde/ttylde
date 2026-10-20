@@ -1,3 +1,5 @@
+import { CHECK_ICON } from "./icons";
+
 // The small forms that open over the window: the one that renames a tab,
 // the settings of a space. One at a time, each with a field for a name.
 
@@ -105,10 +107,6 @@ export function row(className: string, ...children: HTMLElement[]): HTMLElement 
 }
 
 /**
- * A row of choices side by side, one of them picked: `onPick` is called
- * with the value of the one picked, and once at the start with `picked`.
- */
-/**
  * Rows of colors to pick one from. `onPick` is called with the one picked,
  * and once at the start with `picked`.
  */
@@ -121,6 +119,9 @@ export function swatches(
     colors.map((color) => {
       const swatch = button("swatch", "");
       swatch.style.background = color;
+      // The ring of the one picked is in its own color.
+      swatch.style.setProperty("--swatch", color);
+      swatch.innerHTML = CHECK_ICON;
       swatch.title = color;
       swatch.addEventListener("click", () => pick(color));
       return { color, swatch };

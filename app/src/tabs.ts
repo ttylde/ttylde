@@ -948,6 +948,7 @@ export class Tabs {
       left: this.popoverLeft(),
       look: tab.look,
       placeholder: defaultTitle(tab) ?? UNTITLED,
+      cwd: tab.cwd,
       onChange: (look) => {
         tab.look = look;
         this.retitle(tab);
