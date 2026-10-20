@@ -284,6 +284,29 @@ impl Session {
         self.emulator.lock().unwrap().selection_text()
     }
 
+    /// Brings the prompt above the first line shown (or below it) to the
+    /// top of the view.
+    pub fn jump_to_prompt(&self, up: bool) {
+        if self.emulator.lock().unwrap().jump_to_prompt(up) {
+            self.emit_frame();
+        }
+    }
+
+    /// The output of the last command run: see `Emulator::last_output`.
+    pub fn last_output(&self) -> Option<String> {
+        self.emulator.lock().unwrap().last_output()
+    }
+
+    /// Selects the output of the last command run. Returns whether there
+    /// was one.
+    pub fn select_last_output(&self) -> bool {
+        let selected = self.emulator.lock().unwrap().select_last_output();
+        if selected {
+            self.emit_frame();
+        }
+        selected
+    }
+
     /// Reports a mouse event to the program, if it asked for it.
     /// Returns `false` if nothing was written.
     pub fn mouse(&mut self, event: MouseEvent) -> io::Result<bool> {
@@ -733,6 +756,20 @@ mod tests {
         wait_for_event(&rx, SessionEvent::Prompt);
         wait_for_event(&rx, SessionEvent::CommandStart(Some("make all".into())));
         wait_for_event(&rx, SessionEvent::CommandEnd(Some(2)));
+    }
+
+    // Once a command ended, its output can be read back.
+    #[test]
+    fn the_output_of_the_last_command_of_the_shell() {
+        let mut cmd = CommandBuilder::new("sh");
+        cmd.args([
+            "-c",
+            r"printf '\033]133;A\007$ \033]133;B\007make\r\n\033]133;C\007oops\r\n\033]133;D;2\007\033]133;A\007$ '; read x",
+        ]);
+        let (session, rx) = spawn_with_channel(cmd);
+
+        wait_for_event(&rx, SessionEvent::CommandEnd(Some(2)));
+        assert_eq!(session.last_output().as_deref(), Some("oops"));
     }
 
     // Output that forges a mark without the nonce gives no text, and so

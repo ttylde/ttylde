@@ -134,4 +134,16 @@ describe("actionOf", () => {
     expect(actionOf(stroke({ key: "Tab", code: "Tab" }), true)).toBeNull();
     expect(actionOf(stroke({ key: "c", code: "KeyC", ctrlKey: true }), true)).toBeNull();
   });
+
+  // Cmd+Up and Cmd+Down, as Terminal.app; Ctrl+Shift off macOS.
+  test("the arrows with the modifier of the app go from prompt to prompt", () => {
+    expect(actionOf(stroke({ key: "ArrowUp", code: "ArrowUp", metaKey: true }), true)).toEqual({
+      type: "jump-prompt",
+      up: true,
+    });
+    const down = stroke({ key: "ArrowDown", code: "ArrowDown", ctrlKey: true, shiftKey: true });
+    expect(actionOf(down, false)).toEqual({ type: "jump-prompt", up: false });
+    // A plain arrow is the shell's.
+    expect(actionOf(stroke({ key: "ArrowUp", code: "ArrowUp" }), true)).toBeNull();
+  });
 });

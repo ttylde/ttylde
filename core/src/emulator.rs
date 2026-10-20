@@ -3,6 +3,7 @@
 //! Split by concern: colors in `color`, mouse selection in `selection`,
 //! unit tests in `tests`. All of them extend `Emulator`.
 
+mod blocks;
 mod color;
 mod listener;
 mod osc;
@@ -28,7 +29,10 @@ use alacritty_terminal::{
 use crate::{
     command::Mark,
     cwd::Location,
-    emulator::osc::{Announcement, OscWatcher},
+    emulator::{
+        blocks::Blocks,
+        osc::{Announcement, OscWatcher},
+    },
     frame::{Cursor, CursorShape, Frame, LineUpdate, Segment, SegmentFlags},
     input::{InputMode, MouseTracking},
     theme::Theme,
@@ -36,6 +40,7 @@ use crate::{
 
 use listener::InternalEventListener;
 
+pub use blocks::{BlockState, PromptMark};
 pub use selection::{SelectionKind, SelectionSide};
 
 /// What the terminal asks of whoever drives it, collected while parsing.
@@ -83,6 +88,7 @@ pub struct Emulator {
     /// Reads the same bytes as `parser`, for what it leaves out
     osc_parser: Parser,
     osc: OscWatcher,
+    blocks: Blocks,
 }
 
 impl Emulator {
@@ -116,13 +122,86 @@ impl Emulator {
             focused: true,
             osc_parser: Parser::default(),
             osc: OscWatcher::default(),
+            blocks: Blocks::new(history + usize::from(rows)),
         }
     }
 
     pub fn feed(&mut self, bytes: &[u8]) {
         self.dirty = true;
-        self.parser.advance(&mut self.term, bytes);
-        self.osc_parser.advance(&mut self.osc, bytes);
+        // Where a mark falls in the grid is where the cursor is once the
+        // terminal has read up to it: the bytes go to both parsers a piece
+        // at a time, cut after every byte that can end an OSC (BEL, or the
+        // `\` of ST).
+        let mut rest = bytes;
+        while !rest.is_empty() {
+            let end = rest
+                .iter()
+                .position(|&b| b == 0x07 || b == b'\\')
+                .map_or(rest.len(), |i| i + 1);
+            let (piece, tail) = rest.split_at(end);
+            let from = self.osc.len();
+            self.osc_parser.advance(&mut self.osc, piece);
+            self.parser.advance(&mut self.term, piece);
+            if self.osc.len() > from {
+                self.place_marks(from);
+            }
+            rest = tail;
+        }
+    }
+
+    // The marks announced from the `from`th on, where the cursor is now.
+    fn place_marks(&mut self, from: usize) {
+        for announcement in self.osc.since(from) {
+            let term = &mut self.term;
+            match announcement {
+                Announcement::Mark(Mark::Prompt) => self.blocks.prompt(term),
+                Announcement::Typed => self.blocks.typed(term),
+                Announcement::Mark(Mark::Start(_)) => self.blocks.started(term),
+                Announcement::Mark(Mark::End(status)) => self.blocks.ended(term, *status),
+                Announcement::Mark(Mark::Text(_)) | Announcement::Location(_) => {}
+            }
+        }
+    }
+
+    /// The prompts that start on screen, and how their commands went.
+    pub fn prompts_on_screen(&self) -> Vec<PromptMark> {
+        self.blocks.on_screen(&self.term)
+    }
+
+    /// Scrolls to the prompt above the first line shown, or below it.
+    /// Returns whether the view moved.
+    pub fn jump_to_prompt(&mut self, up: bool) -> bool {
+        let moved = self.blocks.jump(&mut self.term, up);
+        self.dirty |= moved;
+        moved
+    }
+
+    /// The output of the last command run, as text.
+    pub fn last_output(&self) -> Option<String> {
+        let (start, end) = self.blocks.last_output(&self.term)?;
+        let last = Column(self.term.last_column().0);
+        Some(
+            self.term
+                .bounds_to_string(Point::new(start, Column(0)), Point::new(end, last)),
+        )
+    }
+
+    /// Selects the output of the last command run, and scrolls to where it
+    /// starts if that is not in view. Returns whether there was one.
+    pub fn select_last_output(&mut self) -> bool {
+        let Some((start, end)) = self.blocks.last_output(&self.term) else {
+            return false;
+        };
+        blocks::select_lines(&mut self.term, start, end);
+        let top = -(self.display_offset() as i32);
+        let bottom = top + self.term.screen_lines() as i32 - 1;
+        if start.0 < top || start.0 > bottom {
+            let offset = (-start.0).clamp(0, self.term.grid().history_size() as i32);
+            self.term
+                .scroll_display(Scroll::Delta(offset - self.display_offset() as i32));
+        }
+        self.dirty = true;
+        true
     }
 
     #[cfg(test)]
@@ -396,9 +475,10 @@ impl Emulator {
             })
             .collect();
 
-        events.extend(self.osc.take().into_iter().map(|a| match a {
-            Announcement::Location(location) => EmulatorEvent::Location(location),
-            Announcement::Mark(mark) => EmulatorEvent::Mark(mark),
+        events.extend(self.osc.take().into_iter().filter_map(|a| match a {
+            Announcement::Location(location) => Some(EmulatorEvent::Location(location)),
+            Announcement::Mark(mark) => Some(EmulatorEvent::Mark(mark)),
+            Announcement::Typed => None,
         }));
         events
     }

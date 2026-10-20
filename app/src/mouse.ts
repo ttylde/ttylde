@@ -177,6 +177,15 @@ export function attachMouse(
     { passive: false },
   );
 
+  // A selection made by the app, not by the mouse: its text is ready to copy.
+  canvas.addEventListener(
+    "selected",
+    (e) => {
+      selectedText = (e as CustomEvent<string | null>).detail;
+    },
+    { signal },
+  );
+
   textarea.addEventListener(
     "copy",
     (e) => {

@@ -225,6 +225,34 @@ export function closeTab(tab: Tab): void {
   if (tab.id >= 0) void invoke("session_close", { id: tab.id });
 }
 
+/**
+ * The prompt above the first line shown (`up`), or below it, comes to the
+ * top of the view.
+ */
+export function jumpToPrompt(tab: Tab, up: boolean): void {
+  if (tab.id >= 0) void invoke("session_jump_to_prompt", { id: tab.id, up });
+}
+
+/** The output of the last command run in `tab`, `null` if there is none. */
+export async function lastOutput(tab: Tab): Promise<string | null> {
+  if (tab.id < 0) return null;
+  return invoke<string | null>("session_last_output", { id: tab.id });
+}
+
+/**
+ * Selects the output of the last command run in `tab`, ready for Cmd+C.
+ * Returns whether there was one.
+ */
+export async function selectLastOutput(tab: Tab): Promise<boolean> {
+  if (tab.id < 0) return false;
+  const selected = await invoke<boolean>("session_select_last_output", { id: tab.id });
+  if (!selected) return false;
+  const text = await invoke<string | null>("session_selection_text", { id: tab.id });
+  // The mouse keeps the text of the selection for the clipboard.
+  tab.canvas.dispatchEvent(new CustomEvent<string | null>("selected", { detail: text }));
+  return true;
+}
+
 /** Refits the canvas to `width` x `height` CSS pixels and resizes the session. */
 export function resizeTab(tab: Tab, width: number, height: number): void {
   const { cols, rows } = tab.renderer.fit(width, height);

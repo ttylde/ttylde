@@ -816,7 +816,7 @@ fn prompts_and_ends_become_marks() {
         mark(Mark::End(Some(127)))
     );
     assert_eq!(marked(None, b"\x1b]133;D\x07"), mark(Mark::End(None)));
-    // The end of the prompt is not used yet.
+    // The end of the prompt only places the command line: see `blocks`.
     assert!(marked(None, b"\x1b]133;B\x07").is_empty());
 }
 
@@ -867,4 +867,173 @@ fn long_command_lines_arrive_whole() {
         marked(Some("n"), start.as_bytes()),
         mark(Mark::Start(Some(text)))
     );
+}
+
+// A prompt, `cmd` typed after it, its output, its end with `status`.
+fn block(cmd: &str, output: &str, status: i32) -> String {
+    format!("\x1b]133;A\x07$ \x1b]133;B\x07{cmd}\r\n\x1b]133;C\x07{output}\x1b]133;D;{status}\x07")
+}
+
+const PROMPT: &str = "\x1b]133;A\x07$ \x1b]133;B\x07";
+
+fn prompts(emulator: &mut Emulator) -> Vec<(u16, BlockState)> {
+    emulator
+        .prompts_on_screen()
+        .iter()
+        .map(|p| (p.row, p.state))
+        .collect()
+}
+
+// Each prompt on screen, with how its command ended; the one waiting too.
+#[test]
+fn prompts_on_screen_know_how_their_command_went() {
+    let mut emulator = Emulator::new(20, 8, Theme::default(), 100);
+    let bytes = block("ls", "a\r\n", 0) + &block("false", "", 1) + PROMPT;
+    emulator.feed(bytes.as_bytes());
+    assert_eq!(
+        prompts(&mut emulator),
+        vec![
+            (0, BlockState::Ended(Some(0))),
+            (2, BlockState::Ended(Some(1))),
+            (3, BlockState::Waiting),
+        ]
+    );
+}
+
+#[test]
+fn a_command_without_its_end_is_running() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(format!("{PROMPT}sleep 9\r\n\x1b]133;C\x07").as_bytes());
+    assert_eq!(prompts(&mut emulator), vec![(0, BlockState::Running)]);
+}
+
+// The bytes of a mark can arrive in two reads.
+#[test]
+fn a_mark_cut_in_two_is_placed() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"out\r\n\x1b]13");
+    emulator.feed(b"3;A\x07$ ");
+    assert_eq!(prompts(&mut emulator), vec![(1, BlockState::Waiting)]);
+}
+
+// A prompt of two lines starts once.
+#[test]
+fn a_prompt_of_two_lines_starts_on_the_first() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"\x1b]133;A\x07~/code main\r\n$ \x1b]133;B\x07");
+    assert_eq!(prompts(&mut emulator), vec![(0, BlockState::Waiting)]);
+}
+
+// Without the integration nothing is marked.
+#[test]
+fn plain_output_has_no_prompts() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(b"$ ls\r\na\r\n");
+    assert!(prompts(&mut emulator).is_empty());
+}
+
+// The marks go with the lines into the history, and back.
+#[test]
+fn marks_scroll_into_the_history() {
+    let mut emulator = Emulator::new(20, 3, Theme::default(), 100);
+    let bytes = block("seq", "1\r\n2\r\n3\r\n4\r\n", 0) + PROMPT;
+    emulator.feed(bytes.as_bytes());
+    // On screen: 3, 4 and the prompt waiting.
+    assert_eq!(prompts(&mut emulator), vec![(2, BlockState::Waiting)]);
+    emulator.scroll(4);
+    assert_eq!(
+        prompts(&mut emulator),
+        vec![(0, BlockState::Ended(Some(0)))]
+    );
+}
+
+// Narrower, the lines reflow: the prompts are still where their text is.
+#[test]
+fn marks_follow_the_text_when_lines_reflow() {
+    let mut emulator = Emulator::new(20, 6, Theme::default(), 100);
+    let bytes = block("echo", "abcdefghijklmnop\r\n", 0) + PROMPT;
+    emulator.feed(bytes.as_bytes());
+    emulator.resize(8, 6);
+    // The output takes two lines now, and the first prompt went into the
+    // history to keep the cursor where it was.
+    assert_eq!(prompts(&mut emulator), vec![(2, BlockState::Waiting)]);
+    emulator.scroll(1);
+    assert_eq!(
+        prompts(&mut emulator),
+        vec![(0, BlockState::Ended(Some(0))), (3, BlockState::Waiting)]
+    );
+}
+
+// Written over, a prompt is gone.
+#[test]
+fn a_prompt_written_over_is_gone() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(format!("{PROMPT}\x1b[H\x1b[2J").as_bytes());
+    assert!(prompts(&mut emulator).is_empty());
+}
+
+// Links of a program in its output are not marks.
+#[test]
+fn links_in_the_output_are_not_marks() {
+    let mut emulator = Emulator::new(30, 5, Theme::default(), 100);
+    let output = "\x1b]8;;file:///a\x07a\x1b]8;;\x07\r\n";
+    let bytes = block("ls", output, 0) + PROMPT;
+    emulator.feed(bytes.as_bytes());
+    assert_eq!(emulator.last_output().as_deref(), Some("a"));
+    assert_eq!(prompts(&mut emulator).len(), 2);
+}
+
+#[test]
+fn the_output_of_the_last_command() {
+    let mut emulator = Emulator::new(20, 8, Theme::default(), 100);
+    let bytes = block("ls", "x\r\n", 0) + &block("seq 2", "1\r\n2\r\n\r\n", 0) + PROMPT;
+    emulator.feed(bytes.as_bytes());
+    // The empty line at its end is left out.
+    assert_eq!(emulator.last_output().as_deref(), Some("1\n2"));
+}
+
+#[test]
+fn the_output_of_a_command_still_running() {
+    let mut emulator = Emulator::new(20, 8, Theme::default(), 100);
+    emulator.feed(format!("{PROMPT}tail\r\n\x1b]133;C\x07one\r\ntwo").as_bytes());
+    assert_eq!(emulator.last_output().as_deref(), Some("one\ntwo"));
+}
+
+#[test]
+fn no_output_without_a_command() {
+    let mut emulator = Emulator::new(20, 8, Theme::default(), 100);
+    emulator.feed(PROMPT.as_bytes());
+    assert_eq!(emulator.last_output(), None);
+    emulator.feed(format!("true\r\n\x1b]133;C\x07\x1b]133;D;0\x07{PROMPT}").as_bytes());
+    assert_eq!(emulator.last_output(), None);
+}
+
+#[test]
+fn selecting_the_last_output() {
+    let mut emulator = Emulator::new(20, 8, Theme::default(), 100);
+    let bytes = block("seq 2", "1\r\n2\r\n", 0) + PROMPT;
+    emulator.feed(bytes.as_bytes());
+    assert!(emulator.select_last_output());
+    assert_eq!(emulator.selection_text().as_deref(), Some("1\n2\n"));
+}
+
+// Up, each prompt comes to the top of the view; down, back to the bottom.
+#[test]
+fn jumping_from_prompt_to_prompt() {
+    let mut emulator = Emulator::new(20, 3, Theme::default(), 100);
+    let bytes = block("a", "1\r\n2\r\n", 0) + &block("b", "3\r\n4\r\n", 0) + PROMPT;
+    emulator.feed(bytes.as_bytes());
+    // Lines: $ a, 1, 2, $ b, 3, 4, $ — the last three on screen.
+    assert!(emulator.jump_to_prompt(true));
+    assert_eq!(emulator.line_text(0), "$ b");
+    assert!(emulator.jump_to_prompt(true));
+    assert_eq!(emulator.line_text(0), "$ a");
+    // None above the first.
+    assert!(!emulator.jump_to_prompt(true));
+    assert!(emulator.jump_to_prompt(false));
+    assert_eq!(emulator.line_text(0), "$ b");
+    // The last prompt cannot be on top: the view goes to the bottom.
+    assert!(emulator.jump_to_prompt(false));
+    assert_eq!(emulator.display_offset(), 0);
+    assert!(!emulator.jump_to_prompt(false));
 }
