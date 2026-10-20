@@ -49,7 +49,7 @@ describe("cleanName", () => {
 
 describe("popoverTop", () => {
   test("sits a little above its row", () => {
-    expect(popoverTop(200, 180, 800)).toBe(168);
+    expect(popoverTop(200, 180, 800)).toBe(188);
   });
 
   test("moves up when it would leave the window", () => {

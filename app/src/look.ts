@@ -52,5 +52,5 @@ const MARGIN = 8;
  * row it edits, moved up when it would not fit.
  */
 export function popoverTop(rowTop: number, height: number, viewport: number): number {
-  return Math.max(MARGIN, Math.min(rowTop - 32, viewport - height - MARGIN));
+  return Math.max(MARGIN, Math.min(rowTop - 12, viewport - height - MARGIN));
 }
