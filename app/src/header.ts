@@ -1,4 +1,5 @@
-import { BRANCH_ICON, FOLDER_ICON } from "./icons";
+import type { Favorite } from "./favorites";
+import { BRANCH_ICON, CHEVRON_DOWN_ICON, FOLDER_ICON, PLAY_ICON, ZAP_ICON } from "./icons";
 import { folderName } from "./label";
 import type { Space } from "./space";
 import { describe, shown, type TabStatus } from "./status";
@@ -14,18 +15,29 @@ export type HeaderView = {
   /** The folder it works in, `null` until the core tells. */
   cwd: string | null;
   status: TabStatus;
+  /** The saved commands of the space in the header, in their order. */
+  favorites: Favorite[];
+  /** How many more are only in the menu: the button says it. */
+  hidden: number;
+  /** The command running in the tab, if one is: its chip is tinted. */
+  running: string | null;
 };
 
 export type HeaderOptions = {
   root: HTMLElement;
   /** The space is clicked with the sidebar collapsed: its menu opens. */
   onSpaceMenu(anchor: HTMLElement): void;
+  /** A chip of a saved command: it runs in the tab. */
+  onRunFavorite(favorite: Favorite): void;
+  /** The button next to the chips: the menu of the saved commands opens. */
+  onFavoritesMenu(anchor: HTMLElement): void;
 };
 
 /**
  * The line above the terminal: the space of the visible tab, the tab, then
- * the folder it works in and the branch of that folder. The right end is
- * kept for what comes next (favorites, split buttons).
+ * the folder it works in and the branch of that folder, then the saved
+ * commands of its space in the header, and the button of their menu. The
+ * right end is kept for what comes next (split buttons).
  *
  * With the sidebar collapsed the rail has no space name: the one here is
  * the button that opens the space menu.
@@ -42,6 +54,10 @@ export class Header {
   private readonly branch: HTMLElement;
   private readonly branchName: HTMLElement;
   private readonly changes: HTMLElement;
+  private readonly chips: HTMLElement;
+  /** Opens the menu of the saved commands. */
+  readonly favoritesButton: HTMLButtonElement;
+  private readonly hiddenCount: HTMLElement;
   // The whole path of the folder, which a click copies.
   private cwd: string | null = null;
 
@@ -71,6 +87,19 @@ export class Header {
 
     const where = span("header-where");
     where.append(this.folder, this.branch);
+
+    this.chips = span("header-chips");
+    this.favoritesButton = document.createElement("button");
+    this.favoritesButton.type = "button";
+    this.favoritesButton.className = "header-favorites-button";
+    this.favoritesButton.title = "Saved commands of this space";
+    this.hiddenCount = span("header-favorites-count");
+    const opens = span("header-favorites-chevron");
+    opens.innerHTML = CHEVRON_DOWN_ICON;
+    this.favoritesButton.append(icon(ZAP_ICON), this.hiddenCount, opens);
+    const favorites = span("header-favorites");
+    favorites.append(this.chips, this.favoritesButton);
+
     root.append(
       this.spaceButton,
       span("header-separator", "›"),
@@ -78,10 +107,12 @@ export class Header {
       this.dot,
       span("header-rule"),
       where,
+      span("header-rule"),
+      favorites,
     );
 
     // The keyboard stays in the terminal.
-    for (const button of [this.spaceButton, this.folder]) {
+    for (const button of [this.spaceButton, this.folder, this.favoritesButton]) {
       button.addEventListener("mousedown", (e) => e.preventDefault());
     }
     this.spaceButton.addEventListener("click", () => {
@@ -90,6 +121,9 @@ export class Header {
     this.folder.addEventListener("click", () => {
       if (this.cwd !== null) copy(this.cwd);
     });
+    this.favoritesButton.addEventListener("click", () =>
+      options.onFavoritesMenu(this.favoritesButton),
+    );
   }
 
   /**
@@ -124,10 +158,31 @@ export class Header {
       const { branch, dirty } = view.git;
       this.branchName.textContent = branch;
       // `main*`: changes to commit, as prompts and editors write it.
-      // `main*`: changes to commit, as prompts and editors write it.
       this.changes.textContent = dirty ? "*" : "";
       this.branch.title = `${branch}: ${dirty ? "changes to commit" : "nothing to commit"}`;
     }
+
+    this.hiddenCount.textContent = view.hidden > 0 ? String(view.hidden) : "";
+    this.chips.replaceChildren(
+      ...view.favorites.map((favorite) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "header-chip-favorite";
+        chip.classList.toggle("running", favorite.command === view.running);
+        chip.title = favorite.command;
+        const play = span("header-play");
+        play.innerHTML = PLAY_ICON;
+        chip.append(play, favorite.name);
+        chip.addEventListener("mousedown", (e) => e.preventDefault());
+        chip.addEventListener("click", () => this.options.onRunFavorite(favorite));
+        return chip;
+      }),
+    );
+  }
+
+  /** The menu of the saved commands is open: the button shows it. */
+  setFavoritesOpen(open: boolean): void {
+    this.favoritesButton.classList.toggle("open", open);
   }
 
   /** The space menu opened from here is open: the button shows it. */

@@ -1,3 +1,5 @@
+import type { Favorite, FavoriteStore } from "./favorites";
+import { type Asked, asked } from "./filters";
 import {
   byDay,
   clear,
@@ -8,9 +10,9 @@ import {
   type HistoryCommand,
   timeOf,
 } from "./history";
-import { SEARCH_ICON } from "./icons";
-import { cleanName } from "./look";
-import { SHELLS, SPACE_COLORS, type Space, type SpaceChanges, tabCount } from "./space";
+import { BOOKMARK_ICON, SEARCH_ICON } from "./icons";
+import { COLORS, cleanName } from "./look";
+import { SHELLS, type Space, type SpaceChanges, tabCount } from "./space";
 import type { ClosedSpace } from "./tabs";
 
 export type PaletteOptions = {
@@ -19,8 +21,16 @@ export type PaletteOptions = {
   /** How many tabs the space shown has: deleting it closes them. */
   spaceTabs(): number;
   closedSpaces(): ClosedSpace[];
+  /** The name of the space `id`, if it is still there. */
+  spaceName(id: number): string | null;
   /** Where a command ran, for its row: a tab open there, or the folder. */
   whereOf(cwd: string | null): string;
+  favorites: FavoriteStore;
+  /**
+   * Opens the dialog that saves `command`, for the space `space` (`null`:
+   * the one shown) or everywhere.
+   */
+  saveCommand(command: string, space: number | null): void;
   collapsed(): boolean;
   /** Runs `command` in the tab shown, or in a new one if there is none. */
   run(command: string): void;
@@ -36,19 +46,25 @@ export type PaletteOptions = {
   onClose(): void;
 };
 
-export type Tab = "recent" | "actions";
+export type Tab = "recent" | "saved" | "actions";
 type Scope = "space" | "all";
 type Setting = "rename" | "color" | "folder" | "shell" | "delete";
 
 /** What a row of the palette does when it is picked. */
 type Item =
   | { kind: "command"; command: HistoryCommand }
+  | { kind: "favorite"; favorite: Favorite }
+  /** Saves the text typed as a command, or a new one from scratch. */
+  | { kind: "save"; command: string }
+  /** A filter of the actions: picked, it is typed in. */
+  | { kind: "filter"; token: string }
   | { kind: "action"; label: string; hint: string; run(): void }
   | { kind: "setting"; setting: Setting }
   | { kind: "clear" };
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "recent", label: "Recent" },
+  { id: "saved", label: "Saved" },
   { id: "actions", label: "Actions" },
 ];
 
@@ -64,9 +80,13 @@ export class Palette {
   private readonly tabs: HTMLElement;
   private readonly scopeButton: HTMLButtonElement;
   private readonly input: HTMLInputElement;
+  /** The filter applied to the actions, shown as a chip before the text. */
+  private readonly chip: HTMLElement;
   private readonly list: HTMLElement;
 
   private tab: Tab = "recent";
+  // The filter of the actions once applied: `@space`, or none.
+  private filter: string | null = null;
   private scope: Scope = "space";
   private found: HistoryCommand[] = [];
   private total = 0;
@@ -92,7 +112,9 @@ export class Palette {
     this.input = document.createElement("input");
     this.input.spellcheck = false;
     this.input.autocomplete = "off";
-    search.append(icon, this.input);
+    this.chip = element("span", "palette-chip");
+    this.chip.hidden = true;
+    search.append(icon, this.chip, this.input);
     this.list = element("div", "palette-list");
     this.panel.append(this.tabs, search, this.list);
     this.backdrop.hidden = true;
@@ -113,6 +135,11 @@ export class Palette {
     this.input.addEventListener("input", () => {
       this.selected = 0;
       this.confirming = null;
+      // `@space ` typed in full becomes the chip of the filter.
+      const typed = asked(this.input.value);
+      if (this.tab === "actions" && typed.kind === "filter" && /\s/.test(this.input.value)) {
+        this.applyFilter(typed.token, typed.text);
+      }
       void this.refresh();
     });
     this.input.addEventListener("keydown", (e) => this.key(e));
@@ -127,16 +154,22 @@ export class Palette {
     return !this.panel.hidden;
   }
 
+  /** Draws again, if open: the saved commands changed. */
+  redraw(): void {
+    if (this.isOpen && !this.editing) this.draw();
+  }
+
   /** The tab shown, while it is open. */
   get shownTab(): Tab {
     return this.tab;
   }
 
-  /** Opens on `tab`, with nothing typed. */
-  open(tab: Tab = "recent"): void {
+  /** Opens on `tab`, with `filter` applied to the actions: `@space` from the space menu. */
+  open(tab: Tab = "recent", filter: string | null = null): void {
     this.tab = tab;
     this.scope = this.options.space() ? "space" : "all";
     this.input.value = "";
+    this.applyFilter(tab === "actions" ? filter : null, "");
     this.selected = 0;
     this.editing = null;
     this.confirming = null;
@@ -179,6 +212,19 @@ export class Palette {
   private key(e: KeyboardEvent): void {
     if (e.isComposing) return;
     const mod = e.metaKey || e.ctrlKey;
+    // Backspace with nothing left to delete takes the filter away.
+    if (
+      e.key === "Backspace" &&
+      this.filter &&
+      this.input.selectionStart === 0 &&
+      this.input.selectionEnd === 0
+    ) {
+      e.preventDefault();
+      this.applyFilter(null, this.input.value);
+      this.selected = 0;
+      this.draw();
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       if (!this.confirming) {
@@ -202,11 +248,36 @@ export class Palette {
       e.preventDefault();
       const item = this.items[this.selected];
       if (item?.kind === "command") void this.forget(item.command);
+      if (item?.kind === "favorite") this.options.favorites.remove(item.favorite);
+    } else if (mod && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      const item = this.items[this.selected];
+      if (item?.kind === "command") this.save(item.command.last.command, item.command.last.space);
     }
+  }
+
+  // Applies `token` as the filter of the actions, with `text` left to type;
+  // `null` takes the filter away.
+  private applyFilter(token: string | null, text: string): void {
+    this.filter = token;
+    this.chip.hidden = token === null;
+    this.chip.textContent = token ?? "";
+    this.chip.title = token ? "Filter · Backspace to take it away" : "";
+    this.input.value = text;
+  }
+
+  // What the actions are asked for: the filter applied, or the text typed.
+  private query(): Asked {
+    if (this.filter) {
+      return { kind: "filter", token: this.filter, text: this.input.value.trim().toLowerCase() };
+    }
+    return asked(this.input.value);
   }
 
   private switchTo(tab: Tab): void {
     this.tab = tab;
+    // A filter is of the actions only.
+    if (tab !== "actions") this.applyFilter(null, this.input.value);
     this.selected = 0;
     this.editing = null;
     this.confirming = null;
@@ -230,6 +301,18 @@ export class Palette {
       case "command":
         this.runAndClose(item.command.last.command);
         break;
+      case "favorite":
+        this.runAndClose(item.favorite.command);
+        break;
+      case "save":
+        this.save(item.command, null);
+        break;
+      case "filter":
+        this.applyFilter(item.token, "");
+        this.selected = 0;
+        this.draw();
+        this.input.focus();
+        break;
       case "action":
         this.close();
         item.run();
@@ -246,6 +329,12 @@ export class Palette {
         this.setting(item.setting);
         break;
     }
+  }
+
+  // Closes, and opens the dialog that saves `command`.
+  private save(command: string, space: number | null): void {
+    this.close();
+    this.options.saveCommand(command, space);
   }
 
   private runAndClose(command: string): void {
@@ -279,7 +368,7 @@ export class Palette {
         this.draw();
         break;
       case "color": {
-        const next = SPACE_COLORS[(SPACE_COLORS.indexOf(space.color) + 1) % SPACE_COLORS.length];
+        const next = COLORS[(COLORS.indexOf(space.color) + 1) % COLORS.length];
         this.change({ color: next });
         break;
       }
@@ -312,10 +401,15 @@ export class Palette {
 
   private draw(): void {
     this.drawTabs();
-    this.input.placeholder = this.tab === "recent" ? "Search a command…" : "Search an action…";
+    this.input.placeholder = {
+      recent: "Search a command…",
+      saved: "Filter saved commands…",
+      actions: this.filter ? "Narrow the actions of this space…" : "Search an action, or @space…",
+    }[this.tab];
     this.list.replaceChildren();
     this.items = [];
     if (this.tab === "recent") this.drawRecent();
+    else if (this.tab === "saved") this.drawSaved();
     else this.drawActions();
     if (this.items.length === 0 && this.list.childElementCount === 0) {
       this.list.append(element("div", "palette-empty", this.emptyText()));
@@ -327,7 +421,12 @@ export class Palette {
   }
 
   private emptyText(): string {
-    if (this.tab === "actions") return "No action matches.";
+    if (this.tab === "actions") {
+      return this.query().kind === "choosing"
+        ? "No such filter: @space is the one there is."
+        : "No action matches.";
+    }
+    if (this.tab === "saved") return "No saved command matches.";
     if (this.text) return `No results · Enter to run "${this.text}"`;
     return "No command in this scope yet.";
   }
@@ -355,6 +454,7 @@ export class Palette {
     if (this.text) {
       // Ranked by how well they match: one list, no days.
       for (const command of this.found) this.commandRow(command);
+      if (!this.found.some((c) => c.last.command === this.text)) this.saveRow(this.text);
     } else {
       for (const group of byDay(this.found, Date.now())) {
         this.heading(group.day, commandCount(group.commands.length));
@@ -380,6 +480,19 @@ export class Palette {
       when.append(element("span", "palette-where", where), element("span", "palette-dot", "·"));
     when.append(element("span", "palette-time", timeOf(last.ended)));
     row.append(when);
+    const saved = this.options.favorites.has(last.command, last.space);
+    const bookmark = document.createElement("button");
+    bookmark.type = "button";
+    bookmark.className = "palette-bookmark";
+    bookmark.classList.toggle("saved", saved);
+    bookmark.title = saved ? "Saved" : "Save command (⌘S)";
+    bookmark.innerHTML = BOOKMARK_ICON;
+    bookmark.addEventListener("mousedown", (e) => e.preventDefault());
+    bookmark.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!saved) this.save(last.command, last.space);
+    });
+    row.append(bookmark);
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "palette-forget";
@@ -391,6 +504,60 @@ export class Palette {
       void this.forget(command);
     });
     row.append(remove);
+  }
+
+  // The saved commands in the scope, those the text is part of.
+  private drawSaved(): void {
+    const text = this.text.toLowerCase();
+    const space = this.spaceId;
+    const inScope = (f: Favorite) => space === null || f.space === null || f.space === space;
+    const shown = this.options.favorites.list.filter(
+      (f) =>
+        inScope(f) &&
+        (!text || f.name.toLowerCase().includes(text) || f.command.toLowerCase().includes(text)),
+    );
+    if (shown.length > 0) this.heading("SAVED", String(shown.length));
+    for (const favorite of shown) this.favoriteRow(favorite);
+    if (text) {
+      if (!shown.some((f) => f.command === this.text)) this.saveRow(this.text);
+    } else {
+      const row = this.row({ kind: "save", command: "" }, "palette-row palette-new");
+      row.append(element("span", "palette-mark"), element("span", "", "+ New saved command…"));
+    }
+  }
+
+  private favoriteRow(favorite: Favorite): void {
+    const row = this.row({ kind: "favorite", favorite }, "palette-row palette-command-row");
+    const mark = element("span", "palette-mark saved");
+    mark.innerHTML = BOOKMARK_ICON;
+    row.append(mark, element("span", "palette-command", favorite.command));
+    row.append(element("span", "palette-name", favorite.name));
+    const when = element("span", "palette-when");
+    const where =
+      favorite.space === null ? "global" : (this.options.spaceName(favorite.space) ?? "");
+    when.append(element("span", "palette-where", where));
+    row.append(when);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "palette-forget";
+    remove.title = "Delete saved command (⌘⌫)";
+    remove.textContent = "×";
+    remove.addEventListener("mousedown", (e) => e.preventDefault());
+    remove.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.options.favorites.remove(favorite);
+    });
+    row.append(remove);
+  }
+
+  // "Save ⟨text⟩ as a command…", for text that is not one yet.
+  private saveRow(text: string): void {
+    const row = this.row({ kind: "save", command: text }, "palette-row palette-save");
+    const icon = element("span", "palette-mark saved");
+    icon.innerHTML = BOOKMARK_ICON;
+    const label = element("span", "palette-save-label", "Save ");
+    label.append(element("span", "palette-save-text", text), " as a command…");
+    row.append(icon, label);
   }
 
   private clearRow(): void {
@@ -410,10 +577,18 @@ export class Palette {
 
   private drawActions(): void {
     const space = this.options.space();
-    const actions: { label: string; hint: string; run(): void }[] = [
+    // `space`: one of the actions of the space shown, for `@space`.
+    const actions: { label: string; hint: string; space?: boolean; run(): void }[] = [
       { label: "New tab", hint: "⌘T", run: () => this.options.newTab() },
       ...(space
-        ? [{ label: "Save and close space", hint: "", run: () => this.options.closeSpace() }]
+        ? [
+            {
+              label: "Save and close space",
+              hint: "",
+              space: true,
+              run: () => this.options.closeSpace(),
+            },
+          ]
         : []),
       {
         label: this.options.collapsed() ? "Expand sidebar" : "Collapse sidebar",
@@ -426,19 +601,32 @@ export class Palette {
         run: () => this.options.reopen(index),
       })),
     ];
-    const text = this.text.toLowerCase();
-    for (const action of actions.filter((a) => a.label.toLowerCase().includes(text))) {
+    const query = this.query();
+    if (query.kind === "choosing") {
+      for (const filter of query.filters) {
+        const row = this.row({ kind: "filter", token: filter.token }, "palette-row palette-action");
+        row.append(element("span", "palette-filter", filter.token));
+        row.append(element("span", "palette-hint", filter.label));
+      }
+      return;
+    }
+    // `@space` keeps the actions of the space and its settings.
+    const shown = query.kind === "filter" ? (space ? actions.filter((a) => a.space) : []) : actions;
+    const text = query.text;
+    for (const action of shown.filter((a) => a.label.toLowerCase().includes(text))) {
       const row = this.row({ kind: "action", ...action }, "palette-row palette-action");
       row.append(element("span", "palette-label", action.label));
       if (action.hint) row.append(element("span", "palette-hint", action.hint));
     }
-    if (space) this.drawSettings(space, text);
+    if (space) this.drawSettings(space, text, query.kind === "filter");
   }
 
   // The settings of the space shown, those whose name the text matches;
-  // the name of the space or "space" matches them all.
-  private drawSettings(space: Space, text: string): void {
-    const all = !text || "space".includes(text) || space.name.toLowerCase().includes(text);
+  // the name of the space or "space" matches them all. Under `@space` the
+  // text narrows them by their names alone.
+  private drawSettings(space: Space, text: string, filtered: boolean): void {
+    const all =
+      !text || (!filtered && ("space".includes(text) || space.name.toLowerCase().includes(text)));
     const settings: { id: Setting; label: string }[] = [
       { id: "rename", label: "rename space" },
       { id: "color", label: "space color" },
@@ -470,7 +658,8 @@ export class Palette {
       case "color": {
         row.append(element("span", "palette-label", "Space color"));
         const swatches = element("span", "palette-swatches");
-        for (const color of SPACE_COLORS) {
+        // The colors of the tabs, as in the mockup: the brand, then the spectrum.
+        for (const color of COLORS) {
           const swatch = element("span", "palette-swatch");
           // One of the palette, never text typed by someone.
           swatch.style.background = color;

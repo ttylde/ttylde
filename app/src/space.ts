@@ -1,3 +1,5 @@
+import { COLORS } from "./look";
+
 /** A named group of tabs: the sidebar shows one at a time. */
 export type Space = {
   id: number;
@@ -13,8 +15,13 @@ export type Space = {
 /** What the settings of a space can change. */
 export type SpaceChanges = Pick<Space, "name" | "color" | "folder" | "shell">;
 
-/** The colors a space can have: its own list, apart from those of the tabs. */
-export const SPACE_COLORS = ["#2466ff", "#7fb0ff", "#123dba", "#1f9a6a", "#7c5cf0", "#c9661a"];
+/**
+ * The colors a space can have: those of the tabs, as the palette shows them
+ * (`COLORS`), in the order new spaces take them: blues and a few clear
+ * ones first, so that the first spaces do not come out grey.
+ */
+const FIRST = ["#2466ff", "#7fb0ff", "#123dba", "#1f9a6a", "#7c5cf0", "#c9661a"];
+export const SPACE_COLORS = [...FIRST, ...COLORS.filter((color) => !FIRST.includes(color))];
 
 /** The shells a space can choose among, besides the one of the system. */
 export const SHELLS = ["zsh", "bash", "fish"];

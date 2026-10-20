@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { COLORS, cleanName, defaultLook, ICONS, popoverTop } from "./look";
+import { COLORS, cleanName, defaultLook, ICONS, iconName, popoverTop } from "./look";
 
 describe("defaultLook", () => {
   test("has no name and picks from the lists", () => {
@@ -21,6 +21,20 @@ describe("defaultLook", () => {
   });
 });
 
+// A tab saved with an icon of Lucide gets the one of Untitled UI in its place.
+describe("iconName", () => {
+  test("an icon of before becomes the one that took its place", () => {
+    expect(iconName("server")).toBe("server-01");
+    expect(iconName("house")).toBe("home-02");
+    expect(ICONS).toContain(iconName("square-terminal"));
+  });
+
+  test("an icon of now stays as it is", () => {
+    expect(iconName("terminal")).toBe("terminal");
+    expect(iconName("cube-02")).toBe("cube-02");
+  });
+});
+
 describe("cleanName", () => {
   test("drops the spaces around the name", () => {
     expect(cleanName("  api server ")).toBe("api server");
@@ -35,7 +49,7 @@ describe("cleanName", () => {
 
 describe("popoverTop", () => {
   test("sits a little above its row", () => {
-    expect(popoverTop(200, 180, 800)).toBe(168);
+    expect(popoverTop(200, 180, 800)).toBe(188);
   });
 
   test("moves up when it would leave the window", () => {

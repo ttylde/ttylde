@@ -1,3 +1,5 @@
+import { CHECK_ICON } from "./icons";
+
 // The small forms that open over the window: the one that renames a tab,
 // the settings of a space. One at a time, each with a field for a name.
 
@@ -79,18 +81,12 @@ export function openForm(options: FormOptions): void {
 
 /** The field for a name. */
 export function nameField(value: string, placeholder: string): HTMLInputElement {
-  const field = textField(value, placeholder);
-  field.maxLength = 64;
-  return field;
-}
-
-/** A field for a line of text. */
-export function textField(value: string, placeholder: string): HTMLInputElement {
   const field = document.createElement("input");
   field.className = "field";
   field.value = value;
   field.placeholder = placeholder;
   field.spellcheck = false;
+  field.maxLength = 64;
   return field;
 }
 
@@ -110,40 +106,6 @@ export function row(className: string, ...children: HTMLElement[]): HTMLElement 
   return element;
 }
 
-/** A field with what it is for written above it. */
-export function labelled(text: string, field: HTMLElement): HTMLElement {
-  const label = document.createElement("label");
-  label.className = "form-label";
-  const caption = document.createElement("span");
-  caption.textContent = text;
-  label.append(caption, field);
-  return label;
-}
-
-/**
- * A row of choices side by side, one of them picked: `onPick` is called
- * with the value of the one picked, and once at the start with `picked`.
- */
-export function segmented<T>(
-  choices: { label: string; value: T }[],
-  picked: T,
-  onPick: (value: T) => void,
-): HTMLElement {
-  const buttons = choices.map((choice) => {
-    const segment = button("segment", choice.label);
-    segment.addEventListener("click", () => pick(choice.value));
-    return { value: choice.value, segment };
-  });
-
-  function pick(value: T): void {
-    for (const each of buttons) each.segment.classList.toggle("picked", each.value === value);
-    onPick(value);
-  }
-
-  pick(picked);
-  return row("segments", ...buttons.map(({ segment }) => segment));
-}
-
 /**
  * Rows of colors to pick one from. `onPick` is called with the one picked,
  * and once at the start with `picked`.
@@ -157,6 +119,9 @@ export function swatches(
     colors.map((color) => {
       const swatch = button("swatch", "");
       swatch.style.background = color;
+      // The ring of the one picked is in its own color.
+      swatch.style.setProperty("--swatch", color);
+      swatch.innerHTML = CHECK_ICON;
       swatch.title = color;
       swatch.addEventListener("click", () => pick(color));
       return { color, swatch };

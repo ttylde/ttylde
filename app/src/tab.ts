@@ -30,6 +30,11 @@ export type Tab = {
   offer: string | null;
   /** Running a command, done with one, or at the prompt: the dot. */
   status: TabStatus;
+  /**
+   * The ids of the saved commands in its header, in their order: each tab
+   * has its own. A new tab has none.
+   */
+  favorites: number[];
   /** Name, color and icon the user chose. */
   look: Look;
   /** Background of the last frame, `null` before the first one. */
@@ -93,6 +98,7 @@ export async function openTab(
     ready: false,
     offer: null,
     status: READY,
+    favorites: [],
     look: defaultLook(),
     background: null,
     canvas,

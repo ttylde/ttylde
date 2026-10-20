@@ -28,6 +28,8 @@ export type MenuOptions = {
   /** In CSS pixels; a width of its own when left out. */
   width?: number;
   items: MenuItem[];
+  /** Over another popup, the menu of the saved commands. */
+  over?: boolean;
   /** The menu is gone, with or without a choice. */
   onClose(): void;
 };
@@ -59,6 +61,8 @@ export function openMenu(options: MenuOptions): void {
   backdrop.className = "popover-backdrop";
   const menu = document.createElement("div");
   menu.className = "popover menu";
+  backdrop.classList.toggle("over", options.over ?? false);
+  menu.classList.toggle("over", options.over ?? false);
   if (options.width !== undefined) menu.style.width = `${options.width}px`;
 
   if (options.title !== undefined) {

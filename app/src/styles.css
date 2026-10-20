@@ -1081,6 +1081,15 @@ body.collapsed #toggle-sidebar:hover {
   z-index: 30;
 }
 
+/* A menu over another popup: the menu of a saved command. */
+.popover-backdrop.over {
+  z-index: 36;
+}
+
+.popover.over {
+  z-index: 37;
+}
+
 .popover {
   position: fixed;
   z-index: 31;
@@ -1203,7 +1212,86 @@ body.collapsed #toggle-sidebar:hover {
 
 /* Room for eight icons a row, all of them in sight. */
 .form.rename {
+  gap: 0;
   width: 284px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+/* On top, the tab as it will look: its icon, big, its name, its folder. */
+.rename-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 14px 12px;
+  background: linear-gradient(180deg, rgba(21, 33, 28, 0.035), rgba(21, 33, 28, 0));
+}
+
+.rename-preview {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  color: var(--tab-color);
+}
+
+.form.rename .rename-preview .line-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.rename-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rename-folder {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rename-folder:empty {
+  display: none;
+}
+
+.rename-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 14px 14px;
+}
+
+.rename-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* The title of a part, and on its right the value picked. */
+.rename-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+  color: var(--faint);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rename-value {
+  font: 11px var(--mono);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .field {
@@ -1226,136 +1314,99 @@ body.collapsed #toggle-sidebar:hover {
   box-shadow: 0 0 0 3px rgba(36, 102, 255, 0.22);
 }
 
+.form.rename .field {
+  min-width: 0;
+  padding: 2px 0 4px;
+  border: 0;
+  border-bottom: 1px solid rgba(21, 33, 28, 0.14);
+  border-radius: 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.form.rename .field:focus {
+  border-bottom-color: var(--accent);
+  box-shadow: none;
+}
+
 /* The colors to pick from, a row each. */
 .swatch-rows {
   display: flex;
   flex-direction: column;
   gap: 7px;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgba(21, 33, 28, 0.035);
 }
 
-.swatches,
-.form-actions {
+.swatches {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
 }
 
-/* Eight icons a row; the rest are a scroll away. */
+/* Eight icons a row, as wide as the form. */
 .glyphs {
   display: grid;
-  grid-template-columns: repeat(8, 28px);
+  grid-template-columns: repeat(8, 1fr);
   gap: 2px;
-}
-
-.form-actions {
-  justify-content: flex-end;
-  font-size: 12px;
-}
-
-/* A field with what it is for written above it. */
-.form-label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  color: var(--muted);
-  font-size: 11.5px;
-}
-
-/* Choices side by side: the one picked is raised out of the groove. */
-.segments {
-  display: flex;
-  gap: 4px;
-  width: fit-content;
-  padding: 3px;
-  border-radius: 8px;
-  background: rgba(21, 33, 28, 0.06);
-  font: 12px var(--mono);
-}
-
-.form .segment {
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: none;
-  color: var(--muted);
-}
-
-.form .segment.picked {
-  background: var(--panel);
-  box-shadow: var(--shadow-button);
-  color: var(--ink);
-  font-weight: 600;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgba(21, 33, 28, 0.035);
 }
 
 .form .swatch {
-  width: 18px;
-  height: 18px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(21, 33, 28, 0.08);
+  /* The check shows on the one picked only. */
+  color: transparent;
+  transition: transform 0.12s;
+}
+
+.form .swatch:hover {
+  transform: scale(1.12);
 }
 
 .form .swatch.picked {
   box-shadow:
     0 0 0 2px var(--panel),
-    0 0 0 4px var(--ink);
+    0 0 0 3.5px var(--swatch);
+  color: #fff;
+  transform: scale(1.08);
 }
 
-/* The icons a tab can have, in the color picked for it. */
+/* The icons a tab can have, grey; the one picked in the color picked. */
 .form .glyph {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  aspect-ratio: 1;
   padding: 0;
-  border-radius: 6px;
-  background: none;
-  color: var(--tab-color);
-}
-
-.form .glyph:hover {
-  background: var(--hover);
-}
-
-.form .glyph.picked {
-  background: rgba(36, 102, 255, 0.14);
-}
-
-.form .ghost {
-  padding: 5px 10px;
-  border-radius: 6px;
+  border-radius: 7px;
   background: none;
   color: var(--muted);
 }
 
-.form .ghost:hover {
-  background: var(--hover);
+.form.rename .glyph .line-icon {
+  width: 15px;
+  height: 15px;
 }
 
-/* The primary button: solid white and lifted, the one opaque thing. */
-.form .primary {
-  padding: 5px 12px;
-  border-radius: var(--radius-button);
-  background: #fff;
-  box-shadow: var(--shadow-button);
+.form .glyph:hover {
+  background: rgba(255, 255, 255, 0.9);
   color: var(--ink);
-  font-weight: 600;
 }
 
-.form .primary:hover {
-  background: #f5f7fc;
-}
-
-/* What takes something away: at the other end from the buttons that keep. */
-.form .danger {
-  margin-right: auto;
-  padding: 5px 8px;
-  border-radius: 6px;
-  background: none;
-  color: var(--danger);
-}
-
-.form .danger:hover,
-.form .danger.asked {
-  background: rgba(208, 74, 66, 0.08);
+.form .glyph.picked {
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(21, 33, 28, 0.12),
+    0 0 0 1.5px var(--tab-color);
+  color: var(--tab-color);
 }
 
 /* Off-screen but focusable: it receives the keyboard instead of the canvas. */
@@ -1380,6 +1431,11 @@ body.collapsed #toggle-sidebar:hover {
 /* Nothing open at all: the launcher is in the terminal area. */
 body.empty #no-space {
   display: block;
+}
+
+/* The rail has no room for it: the dot of the space menu says enough. */
+body.collapsed.empty #no-space {
+  display: none;
 }
 
 body.empty #section,
@@ -1499,6 +1555,20 @@ body.no-space #space-dot .dot {
 .palette-search-icon {
   display: flex;
   color: var(--muted);
+}
+
+/* A filter applied to the actions, before the text that narrows it. */
+.palette-chip {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: rgba(36, 102, 255, 0.12);
+  color: #1f52d6;
+  font: 600 12.5px var(--mono);
+}
+
+.palette-chip[hidden] {
+  display: none;
 }
 
 .palette-search input {
@@ -1740,6 +1810,11 @@ body.no-space #space-dot .dot {
   font-weight: 600;
 }
 
+.palette-filter {
+  color: var(--accent);
+  font: 12.5px var(--mono);
+}
+
 .palette-empty {
   padding: 18px 16px;
   color: var(--muted);
@@ -1774,4 +1849,507 @@ body.no-space #space-dot .dot {
   height: 8px;
   border-radius: 50%;
   background: #1f52d6;
+}
+
+/* The saved commands of the folder in the header, and the button of their
+   menu: after the folder and the branch, the rest of the line theirs. */
+.header-favorites {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.header-chips {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.header-chip-favorite {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(21, 33, 28, 0.06);
+  color: var(--ink);
+  font: 600 11px var(--mono);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.header-chip-favorite:hover {
+  background: rgba(21, 33, 28, 0.11);
+}
+
+.header-play {
+  display: flex;
+  color: var(--muted);
+}
+
+/* The one running in the tab. */
+.header-chip-favorite.running {
+  background: rgba(36, 102, 255, 0.12);
+}
+
+.header-chip-favorite.running .header-play {
+  color: #1f52d6;
+}
+
+.header-favorites-button {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.header-favorites-count {
+  font: 11px var(--mono);
+}
+
+.header-favorites-count:empty {
+  display: none;
+}
+
+.header-favorites-chevron {
+  display: flex;
+  opacity: 0.6;
+}
+
+.header-favorites-button:hover,
+.header-favorites-button.open {
+  background: rgba(21, 33, 28, 0.06);
+  color: var(--ink);
+}
+
+/* The menu of the saved commands, under its button. */
+.favorites-menu {
+  position: fixed;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 310px;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 18px 44px rgba(21, 33, 28, 0.16),
+    0 0 0 1px rgba(21, 33, 28, 0.05);
+  color: var(--ink);
+  font: 12.5px var(--ui);
+}
+
+.favorites-heading {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px 4px;
+  color: var(--muted);
+  font: 600 10px var(--ui);
+  letter-spacing: 0.08em;
+}
+
+.favorites-folder {
+  font: 11px var(--mono);
+  letter-spacing: 0;
+}
+
+.favorites-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 5px;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 6px;
+}
+
+.favorites-row:hover {
+  background: rgba(21, 33, 28, 0.04);
+}
+
+.favorites-row.dragging {
+  position: relative;
+  z-index: 1;
+  background: #fff;
+  box-shadow: var(--shadow-row);
+}
+
+.favorites-row.drop-above,
+.favorites-line.drop-above {
+  border-top-color: var(--accent);
+}
+
+.favorites-row.drop-below,
+.favorites-line.drop-below {
+  border-bottom-color: var(--accent);
+}
+
+.favorites-grip {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  color: #b8c2bd;
+  cursor: grab;
+  touch-action: none;
+}
+
+.favorites-name {
+  flex: none;
+  color: var(--muted);
+}
+
+.favorites-row.pinned .favorites-name,
+.favorites-row.global .favorites-name {
+  color: var(--ink);
+}
+
+.favorites-command {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font: 11px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.favorites-global {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  color: var(--accent);
+}
+
+.favorites-run,
+.favorites-more {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: 13px / 1 var(--ui);
+  cursor: pointer;
+}
+
+.favorites-run {
+  margin-left: auto;
+}
+
+.favorites-run:hover {
+  background: rgba(36, 102, 255, 0.12);
+  color: #123dba;
+}
+
+.favorites-more {
+  color: #93a19b;
+}
+
+.favorites-more:hover,
+.favorites-more.open {
+  background: rgba(21, 33, 28, 0.06);
+  color: var(--ink);
+}
+
+.favorites-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 6px 1px;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  color: #8a9a93;
+  font: 600 9.5px var(--ui);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.favorites-line-rule {
+  flex: 1;
+  height: 1px;
+  background: rgba(21, 33, 28, 0.1);
+}
+
+.favorites-empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.favorites-rule {
+  height: 1px;
+  margin: 3px 6px;
+  background: var(--line);
+}
+
+.favorites-save {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.favorites-save:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.favorites-plus {
+  display: flex;
+}
+
+.favorites-save-label {
+  white-space: nowrap;
+}
+
+.favorites-key {
+  margin-left: auto;
+  color: #8a9a93;
+  font: 11px var(--mono);
+}
+
+.favorites-last {
+  min-width: 0;
+  overflow: hidden;
+  font: 11px var(--mono);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The dialog that saves a command. */
+.save-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: rgba(21, 33, 28, 0.18);
+}
+
+.save-command {
+  position: fixed;
+  top: 120px;
+  left: 50%;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(440px, 90vw);
+  box-sizing: border-box;
+  padding: 16px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 30px 80px rgba(21, 33, 28, 0.22),
+    0 0 0 1px rgba(21, 33, 28, 0.05);
+  color: var(--ink);
+  font: 12.5px var(--ui);
+}
+
+.save-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.save-icon {
+  display: flex;
+  color: var(--muted);
+}
+
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.save-label {
+  flex: none;
+  width: 64px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.save-box {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid rgba(21, 33, 28, 0.14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.save-dollar {
+  color: var(--muted);
+  font: 12.5px var(--mono);
+}
+
+.save-field {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(21, 33, 28, 0.14);
+  border-radius: 7px;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+  font: 13px var(--mono);
+}
+
+.save-box .save-field {
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+}
+
+.save-segments {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(21, 33, 28, 0.05);
+}
+
+.save-segment {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: 12px var(--ui);
+  cursor: pointer;
+}
+
+.save-segment.current {
+  background: #fff;
+  box-shadow: var(--shadow-row);
+  color: var(--ink);
+}
+
+.save-segment:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.save-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.save-cancel,
+.save-confirm {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: 12px var(--ui);
+  cursor: pointer;
+}
+
+.save-cancel:hover {
+  background: var(--hover);
+}
+
+.save-confirm {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow-button);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.save-confirm:hover {
+  background: #f5f7fc;
+}
+
+/* The saved commands in the palette, and the rows that save one. */
+.palette-mark.saved {
+  display: flex;
+  justify-content: center;
+  width: 13px;
+  color: var(--muted);
+}
+
+.palette-name {
+  flex: none;
+  color: var(--muted);
+  font: 11px var(--ui);
+  white-space: nowrap;
+}
+
+.palette-bookmark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  margin-right: -6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #93a19b;
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.palette-bookmark.saved {
+  color: var(--ink);
+  cursor: default;
+  visibility: visible;
+}
+
+.palette-row:hover .palette-bookmark,
+.palette-row.selected .palette-bookmark {
+  visibility: visible;
+}
+
+.palette-bookmark:not(.saved):hover {
+  color: var(--ink);
+}
+
+.palette-save,
+.palette-new {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.palette-save-text {
+  color: var(--ink);
+  font: 12.5px var(--mono);
 }

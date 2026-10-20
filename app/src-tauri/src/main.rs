@@ -57,6 +57,8 @@ fn main() {
             sessions::restore_runs_by_itself,
             saved::state_load,
             saved::state_save,
+            saved::favorites_load,
+            saved::favorites_save,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Ttylde");

@@ -17,6 +17,8 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 - **Scrollback, selection and copy**: drag, double click for a word, triple click for a line.
 - **Mouse and focus reporting** for the programs that ask for them (vim, htop, tmux). Hold Shift to select text anyway.
 - **Unicode**: wide characters and combining marks, with glyphs from fallback fonts kept inside their cells.
+- **Saved commands**, for one space or global, run with a click. Each tab has its own chips in the header, in the order you drag them to; the others are in the menu next to them, where each one can be edited, made global or of the space, or deleted.
+- **A palette** for the commands run before, the saved ones and the actions. The settings of a space (name, color, folder, shell) are among the actions: `@space` keeps only those, and the space menu opens the palette on them.
 - **A config file** for the font and the theme colors.
 
 | Shortcut | |
@@ -28,6 +30,7 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 | `Cmd+\` | Collapse or expand the sidebar |
 | `Cmd+P` | Palette: the commands run before, searched by typing |
 | `Cmd+Shift+P` | Palette on its actions |
+| `Cmd+Shift+S` | Save a new command |
 | `Shift+Enter` | New line without sending, in the programs that support it |
 
 ## Configuration
@@ -77,6 +80,8 @@ A command typed with a space in front is never kept, as with `HIST_IGNORE_SPACE`
 The app opens on the launcher: the space you were in, ready to resume with `Enter`, the other closed spaces, and a prompt where typing a command starts a new session. Closing the last open space brings it back. Tabs opened while no space is open belong to none, as in a plain terminal, and are not kept across restarts; opening a space asks whether they come along, and **Move to space…** in the menu of a tab moves it, session alive.
 
 Spaces and tabs are kept across restarts in `~/.local/state/ttylde/state.toml` (or `$XDG_STATE_HOME/ttylde/state.toml`), only you can read it: it has the last command of each tab. The app writes it: it is not meant to be edited. A file it cannot read is moved aside to `state.toml.broken`, and the app starts as on a first run.
+
+Saved commands are in `favorites.toml`, next to the state and readable by you only: a short list, to carry to another machine. Which of them a tab has in its header is kept with the tab, in the state. A command runs in the folder of the tab it is run from; deleting a space deletes its saved commands.
 
 ## Running it
 

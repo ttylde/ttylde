@@ -10,7 +10,9 @@ export type Action =
   | { type: "step-space"; step: number }
   | { type: "toggle-sidebar" }
   /** The palette, open on Recent or on Actions, as in VS Code. */
-  | { type: "palette"; tab: "recent" | "actions" };
+  | { type: "palette"; tab: "recent" | "actions" }
+  /** The dialog of a new saved command. */
+  | { type: "new-command" };
 
 /** The parts of a `KeyboardEvent` a shortcut depends on. */
 export type KeyStroke = Pick<
@@ -25,6 +27,12 @@ export const NEW_TAB_HINT = IS_MAC ? "⌘T" : "Ctrl+Shift+T";
 
 /** How the shortcut of the palette on its commands is written here. */
 export const PALETTE_HINT = IS_MAC ? "⌘P" : "Ctrl+Shift+R";
+
+/** How the shortcut of the palette on its actions is written here. */
+export const ACTIONS_HINT = IS_MAC ? "⌘⇧P" : "Ctrl+Shift+P";
+
+/** How the shortcut of a new saved command is written here. */
+export const NEW_COMMAND_HINT = IS_MAC ? "⌘⇧S" : "Ctrl+Shift+S";
 
 function hasAppModifier(e: KeyStroke, mac: boolean): boolean {
   if (e.altKey) return false;
@@ -47,10 +55,16 @@ export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
   if (mac && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "p") {
     return { type: "palette", tab: "actions" };
   }
+  // Cmd+Shift+S, as in the mockup: a new saved command. Off macOS it is
+  // Ctrl+Shift+S, the modifier of the app.
+  if (mac && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "s") {
+    return { type: "new-command" };
+  }
   if (!hasAppModifier(e, mac)) return null;
   if (e.key.toLowerCase() === "t") return { type: "new-tab" };
   if (e.key.toLowerCase() === "p") return { type: "palette", tab: mac ? "recent" : "actions" };
   if (!mac && e.key.toLowerCase() === "r") return { type: "palette", tab: "recent" };
+  if (!mac && e.key.toLowerCase() === "s") return { type: "new-command" };
   // `key`, not `code`: the backslash sits on different keys across layouts.
   // With Shift held it is the bar.
   if (e.key === "\\" || e.key === "|") return { type: "toggle-sidebar" };
