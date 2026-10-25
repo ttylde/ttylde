@@ -45,6 +45,7 @@ fn main() {
             sessions::session_resize,
             sessions::session_select_start,
             sessions::session_select_update,
+            sessions::session_select_scroll,
             sessions::session_select_clear,
             sessions::session_selection_text,
             sessions::session_jump_to_prompt,

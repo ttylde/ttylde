@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { type Cell, cellAtPoint } from "./geometry";
+import { type Cell, cellAtPoint, edgeScroll } from "./geometry";
 import type { Renderer } from "./renderer";
 
 // Same names as the `SelectionKind` variants in the core.
@@ -9,6 +9,9 @@ type SelectionKind = "Simple" | "Word" | "Line";
 // Same names as `MouseButton` and `MouseAction` in the core.
 type MouseButton = "Left" | "Middle" | "Right" | "WheelUp" | "WheelDown";
 type MouseAction = "Press" | "Release" | "Move";
+
+/** How often a selection dragged past the edge scrolls the view, in ms. */
+const EDGE_EVERY = 50;
 
 /** The core's name for a DOM `MouseEvent.button`, `null` for the extra ones. */
 export function buttonOf(button: number): MouseButton | null {
@@ -33,6 +36,9 @@ export function kindOf(clicks: number): SelectionKind {
  * moves and wheel go to it instead of selecting and scrolling. The core
  * knows which of them the program wants and drops the rest. Holding Shift
  * gives the mouse back to the terminal, as in xterm.
+ *
+ * A selection dragged above or below the grid scrolls the view on a
+ * timer, as long as the pointer stays there: it may not move at all.
  *
  * The selected text is read from the core on mouse release and kept aside:
  * the `copy` event is synchronous and cannot wait for an `invoke`.
@@ -59,6 +65,10 @@ export function attachMouse(
   let scheduled = false;
   let selectedText: string | null = null;
   let wheelRemainder = 0;
+  // While a selection is dragged past the edge: the timer that scrolls,
+  // and where the pointer was last.
+  let edgeTimer = 0;
+  let dragged: MouseEvent | null = null;
 
   function cellOf(e: MouseEvent): Cell {
     const rect = canvas.getBoundingClientRect();
@@ -67,6 +77,31 @@ export function attachMouse(
     const y = (e.clientY - rect.top) * dpr;
     const { cols, rows } = renderer.gridSize();
     return cellAtPoint(x, y, renderer.getMetrics(), cols, rows);
+  }
+
+  // Rows to scroll for the pointer of `e`: see `edgeScroll`.
+  function edgeOf(e: MouseEvent): number {
+    const top = canvas.getBoundingClientRect().top;
+    const rowHeight = renderer.cellHeightCss();
+    return edgeScroll(e.clientY - top, renderer.gridSize().rows * rowHeight, rowHeight);
+  }
+
+  // Each tick scrolls towards the pointer and extends the selection to the
+  // row now at the edge; back over the grid, the moves take over.
+  function scrollEdge(): void {
+    const delta = dragged && selecting ? edgeOf(dragged) : 0;
+    if (delta === 0 || !dragged) {
+      stopEdge();
+      return;
+    }
+    const { row, col, side } = cellOf(dragged);
+    void invoke("session_select_scroll", { id: sessionId, delta, row, col, side });
+  }
+
+  function stopEdge(): void {
+    window.clearInterval(edgeTimer);
+    edgeTimer = 0;
+    dragged = null;
   }
 
   function forProgram(e: MouseEvent): boolean {
@@ -112,6 +147,13 @@ export function attachMouse(
       // A drag is followed anywhere; a move with no button only over the canvas.
       const hovering = !held && e.target === canvas && forProgram(e);
       if (!selecting && !held && !hovering) return;
+      if (selecting) {
+        dragged = e;
+        if (!edgeTimer && edgeOf(e) !== 0) {
+          scrollEdge();
+          edgeTimer = window.setInterval(scrollEdge, EDGE_EVERY);
+        }
+      }
       pending = e;
       if (scheduled) return;
       scheduled = true;
@@ -144,10 +186,15 @@ export function attachMouse(
       if (!selecting || e.button !== 0) return;
       selecting = false;
       pending = null;
+      stopEdge();
       selectedText = await invoke<string | null>("session_selection_text", { id: sessionId });
     },
     { signal },
   );
+
+  // A release outside the window may never arrive: the drag ends there.
+  window.addEventListener("blur", stopEdge, { signal });
+  signal.addEventListener("abort", stopEdge);
 
   // The right button belongs to the program too.
   canvas.addEventListener("contextmenu", (e) => {

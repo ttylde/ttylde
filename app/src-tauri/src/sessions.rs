@@ -194,6 +194,20 @@ pub fn session_select_start(
     state.with_session(id, |session| session.select_start(row, col, side, kind))
 }
 
+/// Scrolls the view while a selection is dragged past the edge of the
+/// grid, and extends the selection to a cell of the screen.
+#[tauri::command]
+pub fn session_select_scroll(
+    state: State<'_, Sessions>,
+    id: u32,
+    delta: i32,
+    row: u16,
+    col: u16,
+    side: SelectionSide,
+) -> Result<(), String> {
+    state.with_session(id, |session| session.select_scroll(delta, row, col, side))
+}
+
 #[tauri::command]
 pub fn session_select_update(
     state: State<'_, Sessions>,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { cellAtCol, cellAtPoint, cellsOf } from "./geometry";
+import { cellAtCol, cellAtPoint, cellsOf, edgeScroll } from "./geometry";
 import { buttonOf, kindOf } from "./mouse";
 import { fontStack } from "./renderer";
 import { type Segment, SegmentFlags } from "./types";
@@ -25,6 +25,25 @@ describe("cellAtPoint", () => {
   test("clamps to the grid", () => {
     expect(cellAtPoint(-50, -50, metrics, 80, 24)).toEqual({ row: 0, col: 0, side: "Left" });
     expect(cellAtPoint(5000, 5000, metrics, 80, 24)).toEqual({ row: 23, col: 79, side: "Right" });
+  });
+});
+
+describe("edgeScroll", () => {
+  test("does not scroll over the grid", () => {
+    expect(edgeScroll(0, 300, 20)).toBe(0);
+    expect(edgeScroll(150, 300, 20)).toBe(0);
+    expect(edgeScroll(300, 300, 20)).toBe(0);
+  });
+
+  test("scrolls into the history above the top, out of it below the bottom", () => {
+    expect(edgeScroll(-1, 300, 20)).toBe(1);
+    expect(edgeScroll(301, 300, 20)).toBe(-1);
+  });
+
+  test("goes faster further from the edge, up to a limit", () => {
+    expect(edgeScroll(-45, 300, 20)).toBe(3);
+    expect(edgeScroll(345, 300, 20)).toBe(-3);
+    expect(edgeScroll(-5000, 300, 20)).toBe(10);
   });
 });
 
