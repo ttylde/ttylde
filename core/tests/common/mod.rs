@@ -5,16 +5,20 @@ use std::{
     fs,
     io::Read,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
 use portable_pty::CommandBuilder;
-use ttylde_core::pty::Pty;
+use ttylde_core::{pty::Pty, shell};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-pub const NONCE: &str = "0123456789abcdef";
+/// The nonce of the shells of a test run: random, as in the app.
+pub fn nonce() -> &'static str {
+    static NONCE: OnceLock<String> = OnceLock::new();
+    NONCE.get_or_init(shell::nonce)
+}
 
 pub fn scripts() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("shell-integration")

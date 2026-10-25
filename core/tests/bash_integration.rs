@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 
-use common::{home, scripts, Shell, NONCE};
+use common::{home, nonce, scripts, Shell};
 use portable_pty::CommandBuilder;
 use ttylde_core::{
     session::{EventHandler, Session, SessionEvent},
@@ -39,7 +39,7 @@ fn command(home: &Path, nonce: &str) -> CommandBuilder {
 fn bash(home: &Path) -> Option<Shell> {
     Path::new(BASH)
         .exists()
-        .then(|| Shell::start(command(home, NONCE)))
+        .then(|| Shell::start(command(home, nonce())))
 }
 
 /// A .bash_profile with a plain prompt, and more lines.
@@ -100,7 +100,7 @@ fn the_system_profile_loads_first() {
         "bash-etc",
         &[(".bash_profile", "echo \"read:profile:$PATH:\"\n")],
     );
-    let mut cmd = command(&home, NONCE);
+    let mut cmd = command(&home, nonce());
     cmd.env("PATH", "/nowhere");
     let bash = Shell::start(cmd);
     let text = bash.wait_for(PROMPT, 1);
@@ -116,7 +116,8 @@ fn commands_are_marked_with_their_text_and_status() {
     let text = bash.wait_for("\x1b]133;D;", 1);
 
     let start = format!(
-        "\x1b]133;C;cmdline_url=echo%20caff%C3%A8%20%7C%20cat%3B%20false;nonce={NONCE}\x07"
+        "\x1b]133;C;cmdline_url=echo%20caff%C3%A8%20%7C%20cat%3B%20false;nonce={}\x07",
+        nonce()
     );
     assert!(text.contains(&start), "{text:?}");
     assert_eq!(text.matches("\x1b]133;C").count(), 1, "{text:?}");

@@ -171,7 +171,7 @@ mod tests {
     fn zsh_reads_its_first_file_from_the_scripts() {
         let mut cmd = CommandBuilder::new("/bin/zsh");
         cmd.env_remove("ZDOTDIR");
-        integrate(&mut cmd, Path::new("/bin/zsh"), &scripts(), "n");
+        integrate(&mut cmd, Path::new("/bin/zsh"), &scripts(), &nonce());
 
         assert_eq!(
             env(&cmd, "ZDOTDIR").as_deref(),
@@ -185,7 +185,7 @@ mod tests {
     fn the_zdotdir_of_the_user_is_kept_for_the_script() {
         let mut cmd = CommandBuilder::new("/bin/zsh");
         cmd.env("ZDOTDIR", "/Users/me/.config/zsh");
-        integrate(&mut cmd, Path::new("/bin/zsh"), &scripts(), "n");
+        integrate(&mut cmd, Path::new("/bin/zsh"), &scripts(), &nonce());
 
         assert_eq!(
             env(&cmd, "TTYLDE_ZDOTDIR").as_deref(),
@@ -197,7 +197,7 @@ mod tests {
     fn fish_finds_the_scripts_first_among_its_data_folders() {
         let mut cmd = CommandBuilder::new("fish");
         cmd.env("XDG_DATA_DIRS", "/opt/share");
-        integrate(&mut cmd, Path::new("fish"), &scripts(), "n");
+        integrate(&mut cmd, Path::new("fish"), &scripts(), &nonce());
 
         assert_eq!(
             env(&cmd, "XDG_DATA_DIRS").as_deref(),
@@ -261,14 +261,14 @@ mod tests {
     #[test]
     fn other_shells_only_get_the_nonce() {
         let mut cmd = CommandBuilder::new("/bin/sh");
-        let n = nonce();
         cmd.arg("-l");
         cmd.env_remove("ZDOTDIR");
         cmd.env_remove("XDG_DATA_DIRS");
-        integrate(&mut cmd, Path::new("/bin/sh"), &scripts(), &n);
+        let secret = nonce();
+        integrate(&mut cmd, Path::new("/bin/sh"), &scripts(), &secret);
 
         assert_eq!(argv(&cmd), ["/bin/sh", "-l"]);
-        assert_eq!(env(&cmd, NONCE_VAR).as_deref(), Some(n.as_str()));
+        assert_eq!(env(&cmd, NONCE_VAR), Some(secret));
         assert_eq!(env(&cmd, "ZDOTDIR"), None);
         assert_eq!(env(&cmd, "XDG_DATA_DIRS"), None);
     }
