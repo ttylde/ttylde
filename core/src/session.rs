@@ -297,6 +297,12 @@ impl Session {
         self.emulator.lock().unwrap().last_output()
     }
 
+    /// The last lines of the output of the last command run: see
+    /// `Emulator::output_tail`.
+    pub fn output_tail(&self, count: usize) -> Vec<String> {
+        self.emulator.lock().unwrap().output_tail(count)
+    }
+
     /// Selects the output of the last command run. Returns whether there
     /// was one.
     pub fn select_last_output(&self) -> bool {

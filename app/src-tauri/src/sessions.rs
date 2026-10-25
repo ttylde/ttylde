@@ -233,6 +233,17 @@ pub fn session_last_output(state: State<'_, Sessions>, id: u32) -> Result<Option
     state.with_session(id, |session| session.last_output())
 }
 
+/// The last `count` lines of the output of the last command run: what the
+/// card of the tab shows when the pointer is on its row.
+#[tauri::command]
+pub fn session_output_tail(
+    state: State<'_, Sessions>,
+    id: u32,
+    count: usize,
+) -> Result<Vec<String>, String> {
+    state.with_session(id, |session| session.output_tail(count))
+}
+
 /// Selects the output of the last command run; `false`: there is none.
 #[tauri::command]
 pub fn session_select_last_output(state: State<'_, Sessions>, id: u32) -> Result<bool, String> {

@@ -105,6 +105,11 @@ impl Blocks {
         }
     }
 
+    /// Whether the shell has marked a prompt: it has the integration.
+    pub(super) fn marked(&self) -> bool {
+        self.last > 0
+    }
+
     fn state(&self, block: u32) -> BlockState {
         // Too old to be kept: it did end.
         self.states
@@ -257,7 +262,7 @@ fn prompt_start(term: &Term<InternalEventListener>, line: Line) -> Option<u32> {
     Some(block)
 }
 
-fn line_is_empty(term: &Term<InternalEventListener>, line: Line) -> bool {
+pub(super) fn line_is_empty(term: &Term<InternalEventListener>, line: Line) -> bool {
     let row = &term.grid()[line];
     (0..term.columns()).all(|c| {
         let cell = &row[Column(c)];
