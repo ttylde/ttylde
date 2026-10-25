@@ -214,7 +214,7 @@ mod tests {
     fn fish_keeps_the_default_data_folders() {
         let mut cmd = CommandBuilder::new("fish");
         cmd.env_remove("XDG_DATA_DIRS");
-        integrate(&mut cmd, Path::new("fish"), &scripts(), "n");
+        integrate(&mut cmd, Path::new("fish"), &scripts(), &nonce());
 
         assert_eq!(
             env(&cmd, "XDG_DATA_DIRS").as_deref(),
@@ -235,7 +235,7 @@ mod tests {
     fn a_login_bash_reads_the_script_instead() {
         let mut cmd = CommandBuilder::new("/bin/bash");
         cmd.arg("-l");
-        integrate(&mut cmd, Path::new("/bin/bash"), &scripts(), "n");
+        integrate(&mut cmd, Path::new("/bin/bash"), &scripts(), &nonce());
 
         assert_eq!(
             argv(&cmd),
@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn a_bash_reads_the_script_in_place_of_its_bashrc() {
         let mut cmd = CommandBuilder::new("bash");
-        integrate(&mut cmd, Path::new("bash"), &scripts(), "n");
+        integrate(&mut cmd, Path::new("bash"), &scripts(), &nonce());
 
         assert_eq!(argv(&cmd)[1], "--rcfile");
         assert_eq!(env(&cmd, "TTYLDE_BASH_INJECT").as_deref(), Some("rc"));
