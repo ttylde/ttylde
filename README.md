@@ -41,9 +41,11 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 Ttylde reads `~/.config/ttylde/config.toml` (or `$XDG_CONFIG_HOME/ttylde/config.toml`) once at startup. Everything in it is optional; a file with a mistake is reported on stderr and ignored.
 
 ```toml
-# The shells Ttylde starts (zsh, fish) load its integration, without any of
-# your files being changed: each tab knows its last command, and the one
-# still running when it closed. `false` starts them exactly as they would.
+# The shells Ttylde starts (zsh, fish, bash) load its integration, without
+# any of your files being changed: each tab knows its last command, and the
+# one still running when it closed. bash reads its login files from the
+# script of Ttylde, as it would itself. `false` starts them exactly as they
+# would.
 shell_integration = true
 
 [font]

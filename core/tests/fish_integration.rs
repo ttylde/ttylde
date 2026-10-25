@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 
-use common::{home, scripts, Shell, NONCE};
+use common::{home, nonce, scripts, Shell};
 use portable_pty::CommandBuilder;
 use ttylde_core::{
     session::{EventHandler, Session, SessionEvent},
@@ -29,7 +29,7 @@ fn find_fish() -> Option<PathBuf> {
 
 /// A fish started as Ttylde starts it, with its config in `home`.
 fn fish(home: &Path) -> Option<Shell> {
-    Some(Shell::start(command(home, NONCE)?))
+    Some(Shell::start(command(home, nonce())?))
 }
 
 fn command(home: &Path, nonce: &str) -> Option<CommandBuilder> {
@@ -54,7 +54,10 @@ fn commands_are_marked_with_their_text_and_status() {
     fish.type_after(PROMPT, 1, "echo caffè; false");
     let text = fish.wait_for("\x1b]133;D;", 1);
 
-    let start = format!("cmdline_url=echo%20caff%C3%A8%3B%20false;nonce={NONCE}\x07");
+    let start = format!(
+        "cmdline_url=echo%20caff%C3%A8%3B%20false;nonce={}\x07",
+        nonce()
+    );
     assert!(text.contains(&start), "{text:?}");
     assert!(text.contains("\x1b]133;D;1"), "{text:?}");
 }
