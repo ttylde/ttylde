@@ -495,6 +495,15 @@ impl Emulator {
         }
     }
 
+    /// A selection dragged past the top or bottom edge: the view scrolls by
+    /// `delta` rows (up when positive, as `scroll`) and the selection
+    /// extends to the given cell of the screen, which now shows other
+    /// lines. The start of the selection stays on its line of the history.
+    pub fn scroll_selection(&mut self, delta: i32, row: u16, col: u16, side: SelectionSide) {
+        self.scroll(delta);
+        self.update_selection(row, col, side);
+    }
+
     pub fn scroll_to_bottom(&mut self) {
         if self.display_offset() != 0 {
             self.term.scroll_display(Scroll::Bottom);

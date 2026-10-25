@@ -275,6 +275,18 @@ impl Session {
         self.emit_frame();
     }
 
+    /// Scrolls the view while a selection is dragged past its edge, and
+    /// extends the selection: see `Emulator::scroll_selection`. Unlike
+    /// `scroll`, the alternate screen gets no arrow keys: there the view
+    /// has nowhere to go.
+    pub fn select_scroll(&self, delta: i32, row: u16, col: u16, side: SelectionSide) {
+        self.emulator
+            .lock()
+            .unwrap()
+            .scroll_selection(delta, row, col, side);
+        self.emit_frame();
+    }
+
     pub fn select_clear(&self) {
         self.emulator.lock().unwrap().clear_selection();
         self.emit_frame();

@@ -481,6 +481,23 @@ fn dragging_selects_a_range_of_text() {
 }
 
 // Double click takes the word, triple click the whole row (newline included).
+// Dragged above the top edge: the view scrolls into the history and the
+// selection, which started on screen, goes up with it.
+#[test]
+fn a_selection_scrolls_into_the_history() {
+    let mut emulator = Emulator::new(20, 3, Theme::default(), 100);
+    emulator.feed(b"1\r\n2\r\n3\r\n4\r\n5\r\n6");
+    // On screen: 4, 5, 6.
+    emulator.start_selection(1, 1, SelectionSide::Right, SelectionKind::Simple);
+    emulator.scroll_selection(2, 0, 0, SelectionSide::Left);
+    assert_eq!(emulator.display_offset(), 2);
+    assert_eq!(emulator.selection_text(), Some("2\n3\n4\n5".to_string()));
+    // Past the top of the history the view stays, the selection too.
+    emulator.scroll_selection(9, 0, 0, SelectionSide::Left);
+    assert_eq!(emulator.display_offset(), 3);
+    assert_eq!(emulator.selection_text(), Some("1\n2\n3\n4\n5".to_string()));
+}
+
 #[test]
 fn word_and_line_selection() {
     let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
