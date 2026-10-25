@@ -261,13 +261,14 @@ mod tests {
     #[test]
     fn other_shells_only_get_the_nonce() {
         let mut cmd = CommandBuilder::new("/bin/sh");
+        let n = nonce();
         cmd.arg("-l");
         cmd.env_remove("ZDOTDIR");
         cmd.env_remove("XDG_DATA_DIRS");
-        integrate(&mut cmd, Path::new("/bin/sh"), &scripts(), "secret");
+        integrate(&mut cmd, Path::new("/bin/sh"), &scripts(), &n);
 
         assert_eq!(argv(&cmd), ["/bin/sh", "-l"]);
-        assert_eq!(env(&cmd, NONCE_VAR).as_deref(), Some("secret"));
+        assert_eq!(env(&cmd, NONCE_VAR).as_deref(), Some(n.as_str()));
         assert_eq!(env(&cmd, "ZDOTDIR"), None);
         assert_eq!(env(&cmd, "XDG_DATA_DIRS"), None);
     }
