@@ -10,6 +10,9 @@
 //!   `ZDOTDIR` back and loads the user's files from there.
 //! - fish: the folder goes first in `XDG_DATA_DIRS`, and fish loads
 //!   `fish/vendor_conf.d/` by itself; the script takes the folder out again.
+//! - bash: a login bash ignores `--rcfile`, so bash starts without `-l` and
+//!   with `--rcfile bash/ttylde-integration.bash`, which reads the files a
+//!   login bash would have read, then registers its hooks.
 //!
 //! Any other shell starts as it would without Ttylde.
 
@@ -33,6 +36,7 @@ const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 pub enum Shell {
     Zsh,
     Fish,
+    Bash,
 }
 
 impl Shell {
@@ -43,6 +47,7 @@ impl Shell {
         match name.strip_prefix('-').unwrap_or(name) {
             "zsh" => Some(Shell::Zsh),
             "fish" => Some(Shell::Fish),
+            "bash" => Some(Shell::Bash),
             _ => None,
         }
     }
@@ -80,6 +85,23 @@ pub fn integrate(cmd: &mut CommandBuilder, program: &Path, scripts: &Path, nonce
             cmd.env("XDG_DATA_DIRS", dirs);
             // What the script takes out of XDG_DATA_DIRS once loaded.
             cmd.env("TTYLDE_FISH_DATA_DIR", scripts);
+        }
+        Some(Shell::Bash) => {
+            // Options of one letter come after the long ones.
+            let argv = cmd.get_argv_mut();
+            let before = argv.len();
+            argv.retain(|arg| arg != "-l" && arg != "--login");
+            let login = argv.len() < before;
+            let at = argv.len().min(1);
+            argv.splice(
+                at..at,
+                [
+                    OsString::from("--rcfile"),
+                    scripts.join("bash/ttylde-integration.bash").into(),
+                ],
+            );
+            // What the script reads in place of what bash would have.
+            cmd.env("TTYLDE_BASH_INJECT", if login { "login" } else { "rc" });
         }
         None => {}
     }
@@ -139,7 +161,8 @@ mod tests {
             Shell::of(Path::new("/opt/homebrew/bin/fish")),
             Some(Shell::Fish)
         );
-        assert_eq!(Shell::of(Path::new("/bin/bash")), None);
+        assert_eq!(Shell::of(Path::new("/bin/bash")), Some(Shell::Bash));
+        assert_eq!(Shell::of(Path::new("/bin/sh")), None);
         assert_eq!(Shell::of(Path::new("/bin/zsh5")), None);
         assert_eq!(Shell::of(Path::new("")), None);
     }
@@ -199,13 +222,51 @@ mod tests {
         );
     }
 
+    fn argv(cmd: &CommandBuilder) -> Vec<String> {
+        cmd.get_argv()
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    // A login bash would ignore the script: it is no login shell, and the
+    // script reads what a login shell reads.
+    #[test]
+    fn a_login_bash_reads_the_script_instead() {
+        let mut cmd = CommandBuilder::new("/bin/bash");
+        cmd.arg("-l");
+        integrate(&mut cmd, Path::new("/bin/bash"), &scripts(), "n");
+
+        assert_eq!(
+            argv(&cmd),
+            [
+                "/bin/bash",
+                "--rcfile",
+                "/app/shell-integration/bash/ttylde-integration.bash"
+            ]
+        );
+        assert_eq!(env(&cmd, "TTYLDE_BASH_INJECT").as_deref(), Some("login"));
+    }
+
+    // Not a login shell: the script reads .bashrc, as bash would.
+    #[test]
+    fn a_bash_reads_the_script_in_place_of_its_bashrc() {
+        let mut cmd = CommandBuilder::new("bash");
+        integrate(&mut cmd, Path::new("bash"), &scripts(), "n");
+
+        assert_eq!(argv(&cmd)[1], "--rcfile");
+        assert_eq!(env(&cmd, "TTYLDE_BASH_INJECT").as_deref(), Some("rc"));
+    }
+
     #[test]
     fn other_shells_only_get_the_nonce() {
-        let mut cmd = CommandBuilder::new("/bin/bash");
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.arg("-l");
         cmd.env_remove("ZDOTDIR");
         cmd.env_remove("XDG_DATA_DIRS");
-        integrate(&mut cmd, Path::new("/bin/bash"), &scripts(), "secret");
+        integrate(&mut cmd, Path::new("/bin/sh"), &scripts(), "secret");
 
+        assert_eq!(argv(&cmd), ["/bin/sh", "-l"]);
         assert_eq!(env(&cmd, NONCE_VAR).as_deref(), Some("secret"));
         assert_eq!(env(&cmd, "ZDOTDIR"), None);
         assert_eq!(env(&cmd, "XDG_DATA_DIRS"), None);
