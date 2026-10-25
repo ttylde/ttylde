@@ -1,8 +1,9 @@
 import { closeForm } from "./form";
 import { PIN_ICON, RENAME_ICON } from "./icons";
 import { folderName } from "./label";
-import { iconMarkup, iconName, type Look } from "./look";
+import { iconMarkup, iconName, type Look, popoverTop } from "./look";
 import { closeMenu, openMenu } from "./menu";
+import { PREVIEW_LINES, Preview, type PreviewContent } from "./preview";
 import { openRename } from "./rename";
 import { dropIndex, makeRoom } from "./reorder";
 import { createSpace, type Space, type SpaceChanges, stepIndex } from "./space";
@@ -12,6 +13,7 @@ import {
   defaultTitle,
   focusTab,
   openTab,
+  outputTail,
   resizeTab,
   runsByItself,
   setTabSpace,
@@ -155,6 +157,14 @@ export class Tabs {
   // The one timer of each tab with a state that changes by itself: a
   // running command whose dot shows, then becomes active.
   private statusTimers = new Map<Tab, number>();
+  // The card of the row the pointer rests on.
+  private preview = new Preview<Tab>({
+    content: (tab) => this.previewOf(tab),
+    place: (row, height) => ({
+      left: this.popoverLeft(),
+      top: popoverTop(row.getBoundingClientRect().top, height, window.innerHeight),
+    }),
+  });
   constructor(private options: TabsOptions) {
     window.setInterval(() => {
       for (const entry of this.entries) this.paintStatus(entry);
@@ -329,6 +339,7 @@ export class Tabs {
       onBackground: (tab) => {
         if (tab === this.active) this.options.onActiveChange(tab);
       },
+      onFrame: (tab) => this.preview.changed(tab),
       onExit: (tab) => this.close(tab),
     };
     let tab: Tab;
@@ -384,7 +395,16 @@ export class Tabs {
 
     row.addEventListener("click", () => this.activate(tab));
     row.addEventListener("dblclick", () => this.rename(tab));
-    row.addEventListener("pointerdown", (e) => this.press(tab, e));
+    row.addEventListener("pointerdown", (e) => {
+      this.preview.leave();
+      this.press(tab, e);
+    });
+    // The card says what a tab in the background is doing: the one shown
+    // says it already, and a row being edited has a popover of its own.
+    row.addEventListener("pointerenter", () => {
+      if (tab !== this.active && !this.renaming && !this.inMenu) this.preview.hover(tab, row);
+    });
+    row.addEventListener("pointerleave", () => this.preview.leave());
     // A double click on a button is two clicks on it, not a rename.
     actions.addEventListener("dblclick", (e) => e.stopPropagation());
     more.addEventListener("click", (e) => {
@@ -461,6 +481,7 @@ export class Tabs {
     if (entry) this.paintStatus(entry);
     if (tab === this.active) this.options.onActiveChange(tab);
     this.changed();
+    this.preview.changed(tab);
   }
 
   // Sets the timer of a running command: its dot shows after a moment, and
@@ -611,6 +632,7 @@ export class Tabs {
   /** The window gained or lost the focus. */
   setFocused(focused: boolean): void {
     this.focused = focused;
+    if (!focused) this.preview.leave();
     if (!this.active) return;
     focusTab(this.active, focused);
     if (focused) {
@@ -765,6 +787,7 @@ export class Tabs {
     if (place !== null && place === this.space) return;
     closeForm();
     closeMenu();
+    this.preview.leave();
     this.space = place;
     for (const entry of this.entries) {
       entry.row.hidden = entry.space !== place && entry.space !== PINNED;
@@ -788,10 +811,12 @@ export class Tabs {
     if (this.active && this.active !== tab) focusTab(this.active, false);
     focusTab(tab, this.focused);
     this.active = tab;
+    this.preview.forget(tab);
     for (const entry of this.entries) {
       const isActive = entry.tab === tab;
       entry.tab.canvas.hidden = !isActive;
       entry.row.classList.toggle("active", isActive);
+      entry.row.title = isActive ? tooltipOf(entry.tab) : "";
       if (isActive) this.lastTab.set(entry.space, tab);
     }
     if (this.focused) this.look(tab);
@@ -806,13 +831,25 @@ export class Tabs {
     entry.icon.innerHTML = iconMarkup(tab.look.icon);
     entry.row.style.setProperty("--tab-color", tab.look.color);
     entry.label.textContent = title;
-    // One hover away: what the program says of itself, and the whole path.
-    const branch = tab.git && `${tab.git.branch}${tab.git.dirty ? " (changes to commit)" : ""}`;
-    entry.row.title = [title, tab.title, tab.cwd, branch]
-      .filter((line) => line !== null)
-      .join("\n");
+    // The others have their card instead.
+    entry.row.title = tab === this.active ? tooltipOf(tab) : "";
     if (tab === this.active) this.options.onActiveChange(tab);
     this.changed();
+  }
+
+  // What the card of `tab` says: `null` once it is shown or gone.
+  private async previewOf(tab: Tab): Promise<PreviewContent | null> {
+    if (tab === this.active || !this.entries.some((e) => e.tab === tab)) return null;
+    const lines = await outputTail(tab, PREVIEW_LINES).catch(() => []);
+    const now = Date.now();
+    const title = titleOf(tab);
+    return {
+      title: tab.cwd === null ? title : `${title} · ${tab.cwd}`,
+      status: shown(tab.status, now),
+      statusText: describe(tab.status, now),
+      command: tab.command,
+      lines,
+    };
   }
 
   // Where popovers open: past the edge of the sidebar, over the terminal.
@@ -825,6 +862,7 @@ export class Tabs {
   private menu(tab: Tab): void {
     const entry = this.entries.find((e) => e.tab === tab);
     if (!entry) return;
+    this.preview.leave();
     openMenu({
       title: entry.label.textContent ?? "",
       left: this.popoverLeft(),
@@ -942,6 +980,7 @@ export class Tabs {
   private rename(tab: Tab): void {
     const entry = this.entries.find((e) => e.tab === tab);
     if (!entry) return;
+    this.preview.leave();
     const { textarea } = this.options;
     openRename({
       row: entry.row.getBoundingClientRect(),
@@ -1052,6 +1091,7 @@ export class Tabs {
     const index = this.tabsOf(place).indexOf(entry);
     if (tab === this.renaming) closeForm();
     if (tab === this.inMenu) closeMenu();
+    this.preview.forget(tab);
     this.entries.splice(this.entries.indexOf(entry), 1);
     this.waiting.delete(tab);
     window.clearTimeout(this.statusTimers.get(tab));
@@ -1135,4 +1175,11 @@ function fromSaved({ cwd, command, restart, favorites, ...look }: SavedTab): Kep
 // commands it records in the history.
 function placed({ tab, space }: Entry): void {
   setTabSpace(tab, space === null || space === PINNED ? null : space.id);
+}
+
+// One hover away on the row of the tab shown: its name, what the program
+// says of itself, and the whole path with its branch.
+function tooltipOf(tab: Tab): string {
+  const branch = tab.git && `${tab.git.branch}${tab.git.dirty ? " (changes to commit)" : ""}`;
+  return [titleOf(tab), tab.title, tab.cwd, branch].filter((line) => line !== null).join("\n");
 }

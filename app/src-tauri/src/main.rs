@@ -49,6 +49,7 @@ fn main() {
             sessions::session_selection_text,
             sessions::session_jump_to_prompt,
             sessions::session_last_output,
+            sessions::session_output_tail,
             sessions::session_select_last_output,
             sessions::session_close,
             sessions::session_set_space,

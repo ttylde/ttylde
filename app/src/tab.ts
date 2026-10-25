@@ -64,6 +64,8 @@ export type TabHandlers = {
   /** Whether the user is looking at the tab: shown, in a window in front. */
   isSeen(tab: Tab): boolean;
   onBackground(tab: Tab): void;
+  /** A frame came: what the screen of the tab shows changed. */
+  onFrame(tab: Tab): void;
   onExit(tab: Tab): void;
 };
 
@@ -114,6 +116,7 @@ export async function openTab(
       case "Frame":
         tab.mouse = event.data.mouse;
         renderer.apply(event.data);
+        handlers.onFrame(tab);
         if (event.data.background !== tab.background) {
           tab.background = event.data.background;
           handlers.onBackground(tab);
@@ -237,6 +240,12 @@ export function jumpToPrompt(tab: Tab, up: boolean): void {
 export async function lastOutput(tab: Tab): Promise<string | null> {
   if (tab.id < 0) return null;
   return invoke<string | null>("session_last_output", { id: tab.id });
+}
+
+/** The last `count` lines of the output of the last command run in `tab`. */
+export async function outputTail(tab: Tab, count: number): Promise<string[]> {
+  if (tab.id < 0) return [];
+  return invoke<string[]>("session_output_tail", { id: tab.id, count });
 }
 
 /**

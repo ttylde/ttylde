@@ -186,6 +186,53 @@ impl Emulator {
         )
     }
 
+    /// The last `count` lines of the output of the last command run, as
+    /// text: what the card of a tab shows. Without the marks of the shell,
+    /// the last lines of the screen that are not empty, as it does not say
+    /// where an output starts.
+    pub fn output_tail(&self, count: usize) -> Vec<String> {
+        let lines: Vec<Line> = match self.blocks.last_output(&self.term) {
+            Some((start, end)) => {
+                let from = start.0.max(end.0 + 1 - count as i32);
+                (from..=end.0).map(Line).collect()
+            }
+            None if self.blocks.marked() => Vec::new(),
+            None => {
+                let mut lines: Vec<Line> = (0..self.term.screen_lines() as i32)
+                    .rev()
+                    .map(Line)
+                    .filter(|&line| !blocks::line_is_empty(&self.term, line))
+                    .take(count)
+                    .collect();
+                lines.reverse();
+                lines
+            }
+        };
+        lines.into_iter().map(|line| self.text_of(line)).collect()
+    }
+
+    // The text of a line of the grid, without the spaces at its end.
+    fn text_of(&self, line: Line) -> String {
+        let row = &self.term.grid()[line];
+        let mut text = String::new();
+        for column in 0..self.term.columns() {
+            let cell = &row[Column(column)];
+            if cell
+                .flags
+                .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
+            {
+                continue;
+            }
+            text.push(match cell.c {
+                '\0' | '\t' => ' ',
+                c => c,
+            });
+            text.extend(cell.zerowidth().into_iter().flatten());
+        }
+        text.truncate(text.trim_end().len());
+        text
+    }
+
     /// Selects the output of the last command run, and scrolls to where it
     /// starts if that is not in view. Returns whether there was one.
     pub fn select_last_output(&mut self) -> bool {

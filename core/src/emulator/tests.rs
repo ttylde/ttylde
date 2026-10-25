@@ -1008,6 +1008,32 @@ fn no_output_without_a_command() {
     assert_eq!(emulator.last_output(), None);
 }
 
+// The card of a tab: the last lines of the output, also from history.
+#[test]
+fn the_tail_of_the_last_output() {
+    let mut emulator = Emulator::new(20, 3, Theme::default(), 100);
+    let bytes = block("seq 5", "1\r\n2\r\n3\r\n4\r\n5\r\n", 0) + PROMPT;
+    emulator.feed(bytes.as_bytes());
+    assert_eq!(emulator.output_tail(3), ["3", "4", "5"]);
+    // Fewer lines than asked: all of them.
+    assert_eq!(emulator.output_tail(9).len(), 5);
+}
+
+#[test]
+fn no_tail_without_a_command() {
+    let mut emulator = Emulator::new(20, 8, Theme::default(), 100);
+    emulator.feed(PROMPT.as_bytes());
+    assert!(emulator.output_tail(3).is_empty());
+}
+
+// A shell without the integration: the last lines of the screen.
+#[test]
+fn the_tail_of_the_screen_without_marks() {
+    let mut emulator = Emulator::new(20, 8, Theme::default(), 100);
+    emulator.feed("a  \r\n\r\nb\r\nc\r\n$ ".as_bytes());
+    assert_eq!(emulator.output_tail(3), ["b", "c", "$"]);
+}
+
 #[test]
 fn selecting_the_last_output() {
     let mut emulator = Emulator::new(20, 8, Theme::default(), 100);

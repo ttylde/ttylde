@@ -1203,6 +1203,85 @@ body.collapsed #toggle-sidebar:hover {
   color: inherit;
 }
 
+/* The card of the row the pointer rests on: what a tab in the background
+   is doing. The row under it keeps the pointer. */
+.preview {
+  width: 310px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    var(--shadow-popover);
+  font: 11.5px / 1.55 var(--mono);
+  pointer-events: none;
+}
+
+.preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font: 12px var(--ui);
+}
+
+.preview-title,
+.preview-line {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.preview-status {
+  flex: none;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.preview-status[data-status="running"] {
+  color: #8a7d12;
+}
+
+.preview-status[data-status="active"] {
+  color: #1f52d6;
+}
+
+.preview-status[data-status="done"] {
+  color: #1f9a6a;
+}
+
+.preview-status[data-status="error"] {
+  color: var(--danger);
+}
+
+.preview-command {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.preview-empty {
+  padding: 10px 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+.preview-hints {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(21, 33, 28, 0.08);
+  font: 11px var(--ui);
+  color: var(--muted);
+}
+
+/* With the sidebar collapsed the card has no hints, as in the design. */
+.collapsed .preview-hints {
+  display: none;
+}
+
 /* A form: a field for a name, things to pick, and its buttons. */
 .form {
   gap: 10px;
