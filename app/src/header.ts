@@ -83,7 +83,13 @@ export class Header {
     const chevron = span("header-chevron");
     chevron.innerHTML =
       '<svg viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>';
-    this.spaceButton.append(this.spaceDot, this.spaceName, chevron);
+    // Lit by main.ts when a command ended in another space.
+    this.spaceButton.append(
+      this.spaceDot,
+      this.spaceName,
+      span("status-dot space-status"),
+      chevron,
+    );
 
     this.tab = span("header-tab");
     this.dot = span("status-dot header-status");

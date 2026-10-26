@@ -14,7 +14,8 @@
     "icons": "tauri icon ../assets/icons/full.png && rm -rf src-tauri/icons/android src-tauri/icons/ios src-tauri/icons/Square*Logo.png src-tauri/icons/StoreLogo.png src-tauri/icons/64x64.png && touch src-tauri/tauri.conf.json"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.12.1"
+    "@tauri-apps/api": "^2.12.1",
+    "@tauri-apps/plugin-notification": "^2.7.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

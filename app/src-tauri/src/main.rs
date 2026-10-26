@@ -22,6 +22,8 @@ fn main() {
     let history = open_history(&config);
 
     tauri::Builder::default()
+        // The end of a command in another space, when the window is not in front.
+        .plugin(tauri_plugin_notification::init())
         .manage(config)
         .setup(|app| {
             // Copied there from core/shell-integration, by `tauri dev` too.

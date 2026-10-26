@@ -6,6 +6,9 @@ import {
   describe,
   ended,
   loudest,
+  NOTICE_DONE_AFTER,
+  NOTICE_ERROR_AFTER,
+  noticeOf,
   READY,
   SHOWN_AFTER,
   seen,
@@ -100,5 +103,40 @@ group("loudest", () => {
     expect(loudest(["active", "running"])).toBe("running");
     expect(loudest(["ready", "ready"])).toBe("ready");
     expect(loudest([])).toBe("ready");
+  });
+});
+
+group("noticeOf", () => {
+  const running = started(READY, 0);
+
+  // An error is news past its first second, a good end only after a long wait.
+  test("an error soon, done only after a long run", () => {
+    const failedAt = (now: number) => noticeOf(running, ended(running, 1, now, false), now);
+    const doneAt = (now: number) => noticeOf(running, ended(running, 0, now, false), now);
+    expect(failedAt(NOTICE_ERROR_AFTER - 1)).toBeNull();
+    expect(failedAt(NOTICE_ERROR_AFTER)).toBe("error");
+    expect(doneAt(NOTICE_DONE_AFTER - 1)).toBeNull();
+    expect(doneAt(NOTICE_DONE_AFTER)).toBe("done");
+  });
+
+  // Ctrl+C is not an error: a long command stopped by hand is done.
+  test("Ctrl+C counts as done", () => {
+    expect(
+      noticeOf(running, ended(running, 130, NOTICE_DONE_AFTER, false), NOTICE_DONE_AFTER),
+    ).toBe("done");
+  });
+
+  // A command running past the time it turns active keeps its start.
+  test("counts from the start of an active command", () => {
+    const active = aged(running, ACTIVE_AFTER);
+    expect(noticeOf(active, ended(active, 0, ACTIVE_AFTER + 1, false), ACTIVE_AFTER + 1)).toBe(
+      "done",
+    );
+  });
+
+  // Seen, or not a command that ran: nothing to say.
+  test("nothing without a command that ended unseen", () => {
+    expect(noticeOf(running, READY, NOTICE_DONE_AFTER)).toBeNull();
+    expect(noticeOf(READY, { status: "error", since: 5000 }, 5000)).toBeNull();
   });
 });

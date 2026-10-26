@@ -63,6 +63,8 @@ export type TabHandlers = {
   onTitle(tab: Tab): void;
   /** A command started or ended, or the shell shows a prompt. */
   onCommand(tab: Tab): void;
+  /** A command ended: `before` is the state it had while it ran. */
+  onEnd(tab: Tab, before: TabStatus): void;
   /** Whether the user is looking at the tab: shown, in a window in front. */
   isSeen(tab: Tab): boolean;
   /** Whether it is the tab the keyboard writes to, seen or not. */
@@ -170,11 +172,14 @@ export async function openTab(
         tab.restart = event.data;
         handlers.onCommand(tab);
         break;
-      case "CommandEnd":
+      case "CommandEnd": {
         tab.restart = null;
-        tab.status = ended(tab.status, event.data, Date.now(), handlers.isSeen(tab));
+        const before = tab.status;
+        tab.status = ended(before, event.data, Date.now(), handlers.isSeen(tab));
         handlers.onCommand(tab);
+        handlers.onEnd(tab, before);
         break;
+      }
       case "Bell":
         flashBell(canvas);
         break;

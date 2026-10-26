@@ -119,3 +119,29 @@ function elapsed(ms: number): string {
   if (minutes < 60) return `${minutes}m`;
   return `${Math.floor(minutes / 60)}h`;
 }
+
+/**
+ * How long a command that ends well runs before its end is news in a space
+ * not shown: a short one is found by its dot on coming back, the notice is
+ * for the long waits, a build or a deploy, while the user did something else.
+ */
+export const NOTICE_DONE_AFTER = 10_000;
+
+/** How long a command that fails runs before its end is news: an error is always worth knowing. */
+export const NOTICE_ERROR_AFTER = 1_000;
+
+/**
+ * Whether the end of a command, from `before` to `after`, is worth a notice
+ * when the user is not where it ran: `null` when it is not.
+ */
+export function noticeOf(
+  before: TabStatus,
+  after: TabStatus,
+  now: number,
+): "done" | "error" | null {
+  if (!isRunning(before)) return null;
+  const ran = now - before.since;
+  if (after.status === "error") return ran >= NOTICE_ERROR_AFTER ? "error" : null;
+  if (after.status === "done") return ran >= NOTICE_DONE_AFTER ? "done" : null;
+  return null;
+}

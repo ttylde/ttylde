@@ -1,7 +1,11 @@
+import type { Status } from "./status";
+
 export type MenuItem = {
   label: string;
   /** Markup written in this app (an icon, a dot) or a character, before the label. */
   icon: string;
+  /** A status dot after the label: see `status.ts`. */
+  status?: Status;
   /** Said in small after the label: how many, how long ago. */
   meta?: string;
   /** The keys that do the same, at the end of the row. */
@@ -101,6 +105,12 @@ export function openMenu(options: MenuOptions): void {
     label.className = "menu-label";
     label.textContent = item.label;
     row.append(icon, label);
+    if (item.status && item.status !== "ready") {
+      const dot = document.createElement("span");
+      dot.className = "status-dot menu-status";
+      dot.dataset.status = item.status;
+      row.append(dot);
+    }
     for (const [className, text] of [
       ["menu-meta", item.meta],
       ["menu-hint", item.hint],

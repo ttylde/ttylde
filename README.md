@@ -21,6 +21,7 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 - **Command blocks**, from the marks of the shell integration: `Cmd+↑` and `Cmd+↓` go from one prompt to the next, and the output of the last command can be copied or selected from the palette.
 - **A card for each tab in the background**: rest the pointer on its row and it shows the name, the state, the last command and the last three lines of its output, following them while it is open.
 - **Split panes**: a tab splits into up to six panes, on the right or below, each a shell of its own in the same folder. The split tab becomes a group, one row in the sidebar with its name, icon and color, and the rows of its panes under it while it is shown. Drag the line between two panes to resize them, double-click it to split the room in half again. The layout is saved with the space.
+- **News from the other spaces**: a command that fails, or ends after a long run, in a space you are not looking at lights a dot on the space menu and shows a notice with a button to go to its tab, and a system notification when the window is behind.
 - **A palette** for the commands run before, the saved ones and the actions. The settings of a space (name, color, folder, shell) are among the actions: `@space` keeps only those, and the space menu opens the palette on them.
 - **A config file** for the font and the theme colors.
 
