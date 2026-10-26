@@ -5,6 +5,7 @@ import {
   aged,
   describe,
   ended,
+  loudest,
   READY,
   SHOWN_AFTER,
   seen,
@@ -88,5 +89,16 @@ group("status", () => {
     expect(describe(aged(running, ACTIVE_AFTER), 2 * 3600_000)).toBe("active · 2h");
     expect(describe(READY, 0)).toBe("");
     expect(describe(ended(running, 1, 5, false), 5)).toBe("exited with error");
+  });
+});
+
+group("loudest", () => {
+  // One dot for a group of panes: what most wants the eye.
+  test("an error, then an end unseen, then a command running", () => {
+    expect(loudest(["ready", "running", "error", "done"])).toBe("error");
+    expect(loudest(["active", "done", "running"])).toBe("done");
+    expect(loudest(["active", "running"])).toBe("running");
+    expect(loudest(["ready", "ready"])).toBe("ready");
+    expect(loudest([])).toBe("ready");
   });
 });

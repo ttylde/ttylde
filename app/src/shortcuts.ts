@@ -14,7 +14,11 @@ export type Action =
   /** The dialog of a new saved command. */
   | { type: "new-command" }
   /** The prompt above the first line shown, or below it, to the top. */
-  | { type: "jump-prompt"; up: boolean };
+  | { type: "jump-prompt"; up: boolean }
+  /** A new pane next to the one shown: on its right in a row, below in a column. */
+  | { type: "split"; direction: "row" | "column" }
+  /** The pane on that side of the one shown. */
+  | { type: "focus-pane"; side: "left" | "right" | "up" | "down" };
 
 /** The parts of a `KeyboardEvent` a shortcut depends on. */
 export type KeyStroke = Pick<
@@ -35,6 +39,17 @@ export const ACTIONS_HINT = IS_MAC ? "⌘⇧P" : "Ctrl+Shift+P";
 
 /** How the shortcut of a new saved command is written here. */
 export const NEW_COMMAND_HINT = IS_MAC ? "⌘⇧S" : "Ctrl+Shift+S";
+
+/** How the shortcuts of a new pane are written here. */
+export const SPLIT_RIGHT_HINT = IS_MAC ? "⌘D" : "Ctrl+Shift+E";
+export const SPLIT_DOWN_HINT = IS_MAC ? "⌘⇧D" : "Ctrl+Shift+O";
+
+const SIDES = {
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  ArrowUp: "up",
+  ArrowDown: "down",
+} as const;
 
 function hasAppModifier(e: KeyStroke, mac: boolean): boolean {
   if (e.altKey) return false;
@@ -62,6 +77,19 @@ export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
   if (mac && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "s") {
     return { type: "new-command" };
   }
+  // Cmd+D on the right, Cmd+Shift+D below, as iTerm2. Off macOS, as
+  // Terminator: Ctrl+Shift+E side by side, Ctrl+Shift+O one over the other.
+  if (mac && e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "d") {
+    return { type: "split", direction: e.shiftKey ? "column" : "row" };
+  }
+  // Cmd+Option and an arrow, as iTerm2: Option and an arrow alone move by
+  // words in the shell. Off macOS, Ctrl+Shift+Alt and an arrow.
+  const modified = mac
+    ? e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey
+    : e.ctrlKey && e.shiftKey && e.altKey && !e.metaKey;
+  if (modified && e.key in SIDES) {
+    return { type: "focus-pane", side: SIDES[e.key as keyof typeof SIDES] };
+  }
   if (!hasAppModifier(e, mac)) return null;
   if (e.key.toLowerCase() === "t") return { type: "new-tab" };
   // Cmd+Up and Cmd+Down, as Terminal.app; Ctrl+Shift with the arrows off macOS.
@@ -71,6 +99,8 @@ export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
   if (e.key.toLowerCase() === "p") return { type: "palette", tab: mac ? "recent" : "actions" };
   if (!mac && e.key.toLowerCase() === "r") return { type: "palette", tab: "recent" };
   if (!mac && e.key.toLowerCase() === "s") return { type: "new-command" };
+  if (!mac && e.key.toLowerCase() === "e") return { type: "split", direction: "row" };
+  if (!mac && e.key.toLowerCase() === "o") return { type: "split", direction: "column" };
   // `key`, not `code`: the backslash sits on different keys across layouts.
   // With Shift held it is the bar.
   if (e.key === "\\" || e.key === "|") return { type: "toggle-sidebar" };

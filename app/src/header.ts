@@ -1,6 +1,16 @@
 import type { Favorite } from "./favorites";
-import { BRANCH_ICON, CHEVRON_DOWN_ICON, FOLDER_ICON, PLAY_ICON, ZAP_ICON } from "./icons";
+import {
+  BRANCH_ICON,
+  CHEVRON_DOWN_ICON,
+  FOLDER_ICON,
+  PLAY_ICON,
+  SPLIT_DOWN_ICON,
+  SPLIT_RIGHT_ICON,
+  ZAP_ICON,
+} from "./icons";
 import { folderName } from "./label";
+import type { Direction } from "./layout";
+import { SPLIT_DOWN_HINT, SPLIT_RIGHT_HINT } from "./shortcuts";
 import type { Space } from "./space";
 import { describe, shown, type TabStatus } from "./status";
 import type { GitStatus } from "./types";
@@ -31,13 +41,15 @@ export type HeaderOptions = {
   onRunFavorite(favorite: Favorite): void;
   /** The button next to the chips: the menu of the saved commands opens. */
   onFavoritesMenu(anchor: HTMLElement): void;
+  /** A split button: a new pane next to the one of the tab. */
+  onSplit(direction: Direction): void;
 };
 
 /**
  * The line above the terminal: the space of the visible tab, the tab, then
  * the folder it works in and the branch of that folder, then the saved
- * commands of its space in the header, and the button of their menu. The
- * right end is kept for what comes next (split buttons).
+ * commands of its space in the header, and the button of their menu. At
+ * the right end, the buttons that split the pane of the tab.
  *
  * With the sidebar collapsed the rail has no space name: the one here is
  * the button that opens the space menu.
@@ -100,6 +112,13 @@ export class Header {
     const favorites = span("header-favorites");
     favorites.append(this.chips, this.favoritesButton);
 
+    const splits = span("header-splits");
+    const right = splitButton(SPLIT_RIGHT_ICON, `New pane on the right (${SPLIT_RIGHT_HINT})`);
+    const down = splitButton(SPLIT_DOWN_ICON, `New pane below (${SPLIT_DOWN_HINT})`);
+    splits.append(right, down);
+    right.addEventListener("click", () => options.onSplit("row"));
+    down.addEventListener("click", () => options.onSplit("column"));
+
     root.append(
       this.spaceButton,
       span("header-separator", "›"),
@@ -109,10 +128,11 @@ export class Header {
       where,
       span("header-rule"),
       favorites,
+      splits,
     );
 
     // The keyboard stays in the terminal.
-    for (const button of [this.spaceButton, this.folder, this.favoritesButton]) {
+    for (const button of [this.spaceButton, this.folder, this.favoritesButton, right, down]) {
       button.addEventListener("mousedown", (e) => e.preventDefault());
     }
     this.spaceButton.addEventListener("click", () => {
@@ -195,6 +215,15 @@ function span(className: string, text = ""): HTMLElement {
   const element = document.createElement("span");
   element.className = className;
   element.textContent = text;
+  return element;
+}
+
+function splitButton(markup: string, title: string): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "header-split";
+  element.title = title;
+  element.innerHTML = markup;
   return element;
 }
 

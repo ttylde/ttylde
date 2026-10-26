@@ -146,4 +146,45 @@ describe("actionOf", () => {
     // A plain arrow is the shell's.
     expect(actionOf(stroke({ key: "ArrowUp", code: "ArrowUp" }), true)).toBeNull();
   });
+
+  // Cmd+D on the right, Cmd+Shift+D below; Ctrl+Shift+E and O elsewhere.
+  test("Cmd+D splits the pane", () => {
+    expect(actionOf(stroke({ key: "d", code: "KeyD", metaKey: true }), true)).toEqual({
+      type: "split",
+      direction: "row",
+    });
+    expect(
+      actionOf(stroke({ key: "D", code: "KeyD", metaKey: true, shiftKey: true }), true),
+    ).toEqual({ type: "split", direction: "column" });
+    const mods = { ctrlKey: true, shiftKey: true };
+    expect(actionOf(stroke({ key: "E", code: "KeyE", ...mods }), false)).toEqual({
+      type: "split",
+      direction: "row",
+    });
+    expect(actionOf(stroke({ key: "O", code: "KeyO", ...mods }), false)).toEqual({
+      type: "split",
+      direction: "column",
+    });
+    // Ctrl+D is the end of input for the shell.
+    expect(actionOf(stroke({ key: "d", code: "KeyD", ctrlKey: true }), true)).toBeNull();
+  });
+
+  // Cmd+Option and an arrow go to the pane on that side.
+  test("Cmd+Option and an arrow go to another pane", () => {
+    const left = stroke({ key: "ArrowLeft", code: "ArrowLeft", metaKey: true, altKey: true });
+    expect(actionOf(left, true)).toEqual({ type: "focus-pane", side: "left" });
+    const up = stroke({ key: "ArrowUp", code: "ArrowUp", metaKey: true, altKey: true });
+    expect(actionOf(up, true)).toEqual({ type: "focus-pane", side: "up" });
+    const off = stroke({
+      key: "ArrowDown",
+      code: "ArrowDown",
+      ctrlKey: true,
+      shiftKey: true,
+      altKey: true,
+    });
+    expect(actionOf(off, false)).toEqual({ type: "focus-pane", side: "down" });
+    // Option and an arrow move by words in the shell.
+    const word = stroke({ key: "ArrowLeft", code: "ArrowLeft", altKey: true });
+    expect(actionOf(word, true)).toBeNull();
+  });
 });

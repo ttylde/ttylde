@@ -1,5 +1,7 @@
 // TypeScript mirror of the frame types defined in core/src/frame.rs.
 
+import type { SavedLayout } from "./layout";
+
 export type Segment = {
   text: string;
   cols: number;
@@ -54,6 +56,8 @@ export type SavedSpace = {
   closed_at: number | null;
   shown: number;
   tabs: SavedTab[];
+  /** Its groups of panes; a file from before them has none. */
+  layouts?: SavedLayout[];
 };
 
 /** Mirror of `State` in core/src/state.rs. */
