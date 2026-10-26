@@ -53,6 +53,33 @@ pub struct Space {
     pub shown: usize,
     #[serde(default)]
     pub tabs: Vec<Tab>,
+    /// Its groups of panes: one tree each, whose leaves are positions in
+    /// `tabs`. A tab in none is on its own.
+    #[serde(default)]
+    pub layouts: Vec<Layout>,
+}
+
+/// How a group of panes divides its room: a tab, or two halves.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Layout {
+    /// The position of the tab among those of the space.
+    Pane(usize),
+    /// `a` takes `ratio` of the room, `b` the rest.
+    Split {
+        split: Direction,
+        ratio: f64,
+        a: Box<Layout>,
+        b: Box<Layout>,
+    },
+}
+
+/// A row puts its halves side by side; a column, one over the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Direction {
+    Row,
+    Column,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -195,6 +222,18 @@ mod tests {
                             favorites: vec![],
                         },
                     ],
+                    // The core keeps the positions as they are: the app checks them.
+                    layouts: vec![Layout::Split {
+                        split: Direction::Row,
+                        ratio: 0.6,
+                        a: Box::new(Layout::Pane(1)),
+                        b: Box::new(Layout::Split {
+                            split: Direction::Column,
+                            ratio: 0.5,
+                            a: Box::new(Layout::Pane(0)),
+                            b: Box::new(Layout::Pane(2)),
+                        }),
+                    }],
                 },
                 Space {
                     id: 2,
@@ -213,6 +252,7 @@ mod tests {
                         restart: None,
                         favorites: vec![],
                     }],
+                    layouts: vec![],
                 },
             ],
             pinned: vec![Tab {
@@ -275,6 +315,7 @@ mod tests {
         let space = &state.spaces[0];
         assert_eq!((space.shell.clone(), space.closed_at), (None, None));
         assert_eq!((space.shown, space.tabs.len()), (0, 0));
+        assert!(space.layouts.is_empty());
     }
 
     // The commands the user ran are in it: only the user reads it.

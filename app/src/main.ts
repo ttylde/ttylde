@@ -23,12 +23,11 @@ import { ACTIONS_HINT, actionOf, NEW_TAB_HINT, PALETTE_HINT } from "./shortcuts"
 import type { Space } from "./space";
 import { ago, tabCount } from "./space";
 import {
-  defaultTitle,
+  backgroundOf,
   jumpToPrompt,
   lastOutput,
   selectLastOutput,
   type Tab,
-  titleOf,
   typeCommand,
 } from "./tab";
 import { Tabs } from "./tabs";
@@ -145,6 +144,7 @@ const header = new Header({
       },
     });
   },
+  onSplit: (direction) => void tabs.split(direction),
 });
 // The tab the window shows, for the header to follow it.
 let shown: Tab | null = null;
@@ -152,7 +152,7 @@ function showHeader(): void {
   header.show(
     shown && {
       place: tabs.activePlace(),
-      title: titleOf(shown),
+      title: tabs.nameOf(shown),
       git: shown.git,
       cwd: shown.cwd,
       status: shown.status,
@@ -247,15 +247,14 @@ const tabs = new Tabs({
     offer.show(tab?.offer ?? null);
     if (!tab) {
       void appWindow.setTitle(DEFAULT_TITLE);
-      terminal.style.background = "";
+      terminal.style.removeProperty("--terminal-bg");
       launcher.show(tabs.closedSpaces());
       return;
     }
     launcher.hide();
-    void appWindow.setTitle(tab.look.name ?? defaultTitle(tab) ?? DEFAULT_TITLE);
-    if (tab.background !== null) {
-      terminal.style.background = `#${tab.background.toString(16).padStart(6, "0")}`;
-    }
+    void appWindow.setTitle(tabs.nameOf(tab));
+    const background = backgroundOf(tab);
+    if (background !== null) terminal.style.setProperty("--terminal-bg", background);
     // A form edits the tab while it changes: the keys stay in the form.
     if (!isFormOpen()) keyboard.focus();
   },
@@ -291,6 +290,7 @@ const tabs = new Tabs({
       });
     }),
   onChange: saveSoon,
+  refuse: toast,
 });
 
 const launcher = new Launcher({
@@ -515,6 +515,12 @@ window.addEventListener(
       case "new-command":
         closeFavoritesMenu();
         saveCommand("", null);
+        break;
+      case "split":
+        void tabs.split(action.direction);
+        break;
+      case "focus-pane":
+        tabs.focusPane(action.side);
         break;
     }
   },

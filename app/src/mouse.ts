@@ -45,7 +45,7 @@ export function kindOf(clicks: number): SelectionKind {
  * No clipboard plugin needed, `clipboardData.setData` is enough.
  *
  * The textarea is shared by every tab: its listeners answer only while
- * this canvas is the visible one, and `signal` removes them, with the ones
+ * this tab is the active one, and `signal` removes them, with the ones
  * on `window`, when the tab closes.
  */
 export function attachMouse(
@@ -54,6 +54,8 @@ export function attachMouse(
   renderer: Renderer,
   sessionId: number,
   reporting: () => boolean,
+  /** Whether it is the tab the keyboard writes to: Cmd+C copies from it. */
+  active: () => boolean,
   signal: AbortSignal,
 ): void {
   let selecting = false;
@@ -236,7 +238,7 @@ export function attachMouse(
   textarea.addEventListener(
     "copy",
     (e) => {
-      if (canvas.hidden || !selectedText) return;
+      if (!active() || !selectedText) return;
       e.preventDefault();
       e.clipboardData?.setData("text/plain", selectedText);
     },
@@ -247,14 +249,14 @@ export function attachMouse(
   textarea.addEventListener(
     "keydown",
     (e) => {
-      if (!canvas.hidden && !e.metaKey) selectedText = null;
+      if (active() && !e.metaKey) selectedText = null;
     },
     { signal },
   );
   textarea.addEventListener(
     "input",
     () => {
-      if (!canvas.hidden) selectedText = null;
+      if (active()) selectedText = null;
     },
     { signal },
   );

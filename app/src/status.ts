@@ -80,6 +80,17 @@ export function aged(current: TabStatus, now: number): TabStatus {
   return { status: "active", since: current.since };
 }
 
+// From what most wants the eye to what wants it least.
+const LOUDNESS: Status[] = ["error", "done", "running", "active", "ready"];
+
+/**
+ * The one state that speaks for several tabs, as one dot: an error first,
+ * then a command that ended unseen, then one running.
+ */
+export function loudest(statuses: Status[]): Status {
+  return LOUDNESS.find((status) => statuses.includes(status)) ?? "ready";
+}
+
 export function isRunning({ status }: TabStatus): boolean {
   return status === "running" || status === "active";
 }

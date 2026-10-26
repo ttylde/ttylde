@@ -39,6 +39,8 @@ export type Tab = {
   look: Look;
   /** Background of the last frame, `null` before the first one. */
   background: number | null;
+  /** Where it is in the terminal area: the box of the canvas, as a pane. */
+  pane: HTMLElement;
   canvas: HTMLCanvasElement;
   renderer: Renderer;
   exited: boolean;
@@ -63,6 +65,8 @@ export type TabHandlers = {
   onCommand(tab: Tab): void;
   /** Whether the user is looking at the tab: shown, in a window in front. */
   isSeen(tab: Tab): boolean;
+  /** Whether it is the tab the keyboard writes to, seen or not. */
+  isActive(tab: Tab): boolean;
   onBackground(tab: Tab): void;
   /** A frame came: what the screen of the tab shows changed. */
   onFrame(tab: Tab): void;
@@ -70,11 +74,18 @@ export type TabHandlers = {
 };
 
 /**
- * Opens a session and a canvas for it inside `container`.
+ * The room around the canvas inside its pane, in CSS pixels: the margin of
+ * the terminal, which every pane has, alone or next to others.
+ */
+export const PANE_PADDING = { x: 14, y: 10 };
+
+/**
+ * Opens a session and a canvas for it inside `container`, in a pane as
+ * big as it.
  *
  * Every tab keeps its own canvas and renderer: a tab in the background
  * goes on receiving frames, so showing it again is only a matter of
- * unhiding the canvas.
+ * unhiding its pane.
  */
 export async function openTab(
   container: HTMLElement,
@@ -83,13 +94,17 @@ export async function openTab(
   start: TabStart,
   handlers: TabHandlers,
 ): Promise<Tab> {
+  const pane = document.createElement("div");
+  pane.className = "pane";
+  pane.hidden = true;
+  pane.style.padding = `${PANE_PADDING.y}px ${PANE_PADDING.x}px`;
   const canvas = document.createElement("canvas");
   canvas.className = "screen";
-  canvas.hidden = true;
-  container.appendChild(canvas);
+  pane.appendChild(canvas);
+  container.appendChild(pane);
 
   const renderer = new Renderer(canvas, fontStack(font.family), font.size);
-  const size = renderer.fit(container.clientWidth, container.clientHeight);
+  const size = renderer.fit(...inside(container.clientWidth, container.clientHeight));
   const tab: Tab = {
     id: -1,
     title: null,
@@ -103,6 +118,7 @@ export async function openTab(
     favorites: [],
     look: defaultLook(),
     background: null,
+    pane,
     canvas,
     renderer,
     exited: false,
@@ -172,11 +188,24 @@ export async function openTab(
   try {
     tab.id = await invoke<number>("session_open", { ...size, ...start, onEvent });
   } catch (error) {
-    canvas.remove();
+    pane.remove();
     throw error;
   }
-  attachMouse(canvas, textarea, renderer, tab.id, () => tab.mouse, tab.abort.signal);
+  attachMouse(
+    canvas,
+    textarea,
+    renderer,
+    tab.id,
+    () => tab.mouse,
+    () => handlers.isActive(tab),
+    tab.abort.signal,
+  );
   return tab;
+}
+
+/** The background of the last frame of `tab`, as CSS; `null` before one. */
+export function backgroundOf(tab: Tab): string | null {
+  return tab.background === null ? null : `#${tab.background.toString(16).padStart(6, "0")}`;
 }
 
 /** What a tab with no name, no title and no known folder is called. */
@@ -224,7 +253,7 @@ export function setTabSpace(tab: Tab, space: number | null): void {
 /** Closes the session and removes everything `openTab` created. */
 export function closeTab(tab: Tab): void {
   tab.abort.abort();
-  tab.canvas.remove();
+  tab.pane.remove();
   if (tab.id >= 0) void invoke("session_close", { id: tab.id });
 }
 
@@ -262,10 +291,18 @@ export async function selectLastOutput(tab: Tab): Promise<boolean> {
   return true;
 }
 
-/** Refits the canvas to `width` x `height` CSS pixels and resizes the session. */
+/**
+ * Refits the canvas to a pane of `width` x `height` CSS pixels and resizes
+ * the session, if its grid changes.
+ */
 export function resizeTab(tab: Tab, width: number, height: number): void {
-  const { cols, rows } = tab.renderer.fit(width, height);
+  const { cols, rows } = tab.renderer.fit(...inside(width, height));
   void invoke("session_resize", { id: tab.id, cols, rows });
+}
+
+// The room of the canvas in a pane of `width` x `height`.
+function inside(width: number, height: number): [number, number] {
+  return [Math.max(1, width - 2 * PANE_PADDING.x), Math.max(1, height - 2 * PANE_PADDING.y)];
 }
 
 /**

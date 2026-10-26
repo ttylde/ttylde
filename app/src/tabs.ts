@@ -1,14 +1,32 @@
 import { closeForm } from "./form";
 import { PIN_ICON, RENAME_ICON } from "./icons";
 import { folderName } from "./label";
+import {
+  boxOf,
+  type Direction,
+  fromSavedLayout,
+  type Layout,
+  MAX_PANES,
+  mapPanes,
+  neighbour as paneOn,
+  panesOf,
+  rectsOf,
+  type SavedLayout,
+  type Side,
+  single,
+  split,
+  toSavedLayout,
+  without,
+} from "./layout";
 import { iconMarkup, iconName, type Look, popoverTop } from "./look";
 import { closeMenu, openMenu } from "./menu";
 import { PREVIEW_LINES, Preview, type PreviewContent } from "./preview";
 import { openRename } from "./rename";
 import { dropIndex, makeRoom } from "./reorder";
 import { createSpace, type Space, type SpaceChanges, stepIndex } from "./space";
-import { ACTIVE_AFTER, aged, describe, SHOWN_AFTER, seen, shown } from "./status";
+import { ACTIVE_AFTER, aged, describe, loudest, SHOWN_AFTER, seen, shown } from "./status";
 import {
+  backgroundOf,
   closeTab,
   defaultTitle,
   focusTab,
@@ -28,6 +46,9 @@ import type { Font, SavedState, SavedTab } from "./types";
 
 /** How far the pointer moves, in pixels, before a press on a row is a drag. */
 const DRAG_THRESHOLD = 4;
+
+/** The room between two panes side by side, in CSS pixels. */
+const PANE_GAP = 8;
 
 /** Where the pinned tabs are: no space, but seen from every one. */
 const PINNED = "pinned";
@@ -49,7 +70,40 @@ type Entry = {
   label: HTMLElement;
   /** The state of the tab, as a dot: see `status.ts`. */
   dot: HTMLElement;
+  close: HTMLButtonElement;
+  /** The group of panes it is in; `null`: it is on its own. */
+  group: Group | null;
+  /** Over its pane, next to others: its name and its state. */
+  pill: { name: HTMLElement; status: HTMLElement };
+  /** The size of its pane, the one its session was last fitted to. */
+  size: { width: number; height: number };
 };
+
+/**
+ * Tabs shown together, each in a pane: one row in the sidebar, with the
+ * rows of its panes under it while it is the one shown. The group is the
+ * tab the user sees: it has the name, the color and the icon, and it is
+ * what is renamed and moved; its panes are only where its shells run.
+ */
+type Group = {
+  layout: Layout<Tab>;
+  /** What it looks like: that of the tab split into it, at first. */
+  look: Look;
+  /** The pane shown last: the group opens on it. */
+  last: Tab;
+  /** Its row and the rows of its panes, in the sidebar. */
+  box: HTMLElement;
+  head: HTMLElement;
+  icon: HTMLElement;
+  label: HTMLElement;
+  count: HTMLElement;
+  dot: HTMLElement;
+  /** Where the rows of its panes go. */
+  panes: HTMLElement;
+};
+
+/** What the sidebar lists as one row: a tab on its own, or a group. */
+type Unit = { element: HTMLElement; entries: Entry[]; group: Group | null };
 
 /** How often the time in the tooltips of the dots is brought up to date. */
 const TOOLTIP_EVERY = 30_000;
@@ -67,8 +121,11 @@ type Kept = {
   favorites: number[];
 };
 
-/** What is kept of a closed space: its tabs, and which one was shown. */
-type Saved = { tabs: Kept[]; shown: number; closedAt: number };
+/**
+ * What is kept of a closed space: its tabs, which one was shown, and its
+ * groups of panes, with the positions of their tabs among `tabs`.
+ */
+type Saved = { tabs: Kept[]; shown: number; closedAt: number; layouts: Layout<number>[] };
 
 /** A closed space as the launcher lists it. */
 export type ClosedSpace = {
@@ -94,7 +151,7 @@ export type TabsOptions = {
   list: HTMLElement;
   /** Where the rows of the pinned tabs go, under the others. */
   pinned: HTMLElement;
-  /** Where the canvases go; its size is the size of every tab. */
+  /** Where the panes go; its size is the size of every tab on its own. */
   screens: HTMLElement;
   textarea: HTMLTextAreaElement;
   /** Font of every tab, from the config file. */
@@ -114,16 +171,24 @@ export type TabsOptions = {
    * user changed their mind, nothing happens.
    */
   ask(count: number, into: string): Promise<"bring" | "close" | null>;
+  /** What was asked cannot be done: `message` says why. */
+  refuse(message: string): void;
 };
 
 /**
  * The open tabs, grouped in spaces: one row each in the sidebar for those
- * of the space that is shown, one canvas each in the terminal area, a
- * single one visible.
+ * of the space that is shown, one pane each in the terminal area.
+ *
+ * A tab is shown on its own, over the whole area, or with the others of
+ * its group, each in a pane: splitting a tab makes a group of it and a new
+ * tab. A group has one row in the sidebar, and the rows of its panes
+ * under it while it is shown. Its tabs are next to each other among those
+ * of their space, in the order of their panes.
  *
  * A tab of a space that is not shown is as alive as the others: its
  * session goes on, and its canvas goes on receiving frames. A closed space
- * has no tab: its sessions are gone, what they looked like is saved.
+ * has no tab: its sessions are gone, what they looked like is saved, and
+ * so are its groups.
  *
  * With no space open, tabs belong to no space, as in a plain terminal.
  * They exist only then: opening a space asks whether they come along. With
@@ -132,6 +197,7 @@ export type TabsOptions = {
  * Pinned tabs belong to no space either, but are there whatever is shown,
  * launcher included, under the tabs of the space. Showing one leaves the
  * space where it is: closing it, or picking a tab of the space, goes back.
+ * They are always on their own.
  */
 export class Tabs {
   private entries: Entry[] = [];
@@ -149,9 +215,9 @@ export class Tabs {
   private active: Tab | null = null;
   // Whether the window has the focus: only then the visible tab has it.
   private focused = document.hasFocus();
-  // The tab the popover is editing, and the one a menu is open on.
-  private renaming: Tab | null = null;
-  private inMenu: Tab | null = null;
+  // The tab or group the popover is editing, and the one a menu is open on.
+  private renaming: Tab | Group | null = null;
+  private inMenu: Tab | Group | null = null;
   // Tabs whose command starts again by itself at the first prompt.
   private waiting = new Map<Tab, string>();
   // The one timer of each tab with a state that changes by itself: a
@@ -260,12 +326,13 @@ export class Tabs {
       saved_at: Date.now(),
       spaces: this.spaces.map((space) => {
         const saved = this.closed.get(space);
-        const { tabs, shown } = saved ?? this.keep(space);
+        const { tabs, shown, layouts } = saved ?? this.keep(space);
         return {
           ...space,
           closed_at: saved?.closedAt ?? null,
           shown,
           tabs: tabs.map(toSaved),
+          layouts: layouts.map((layout) => toSavedLayout(layout, (index) => index)),
         };
       }),
       pinned: this.starting ?? this.tabsOf(PINNED).map(({ tab }) => toSaved(kept(tab))),
@@ -294,6 +361,7 @@ export class Tabs {
         tabs: saved.tabs.map(fromSaved),
         shown: saved.shown,
         closedAt: saved.closed_at ?? quit,
+        layouts: readLayouts(saved.layouts ?? [], saved.tabs.length),
       });
     });
     const shown = kept.findIndex((saved) => saved.id === state.shown && saved.closed_at === null);
@@ -327,16 +395,62 @@ export class Tabs {
     return this.openIn(place, start, null);
   }
 
+  /**
+   * Splits the pane of the visible tab in two: a new tab, in the folder it
+   * is in, on its right in a row or under it in a column, and shown. A
+   * pinned tab is not split, nor a group that has all the panes it can.
+   * `null` if no tab opened.
+   */
+  async split(direction: Direction): Promise<Tab | null> {
+    const tab = this.active;
+    const entry = tab && this.entryOf(tab);
+    if (!tab || !entry) return null;
+    const place = entry.space;
+    if (place === PINNED) {
+      this.options.refuse("A pinned tab cannot be split");
+      return null;
+    }
+    if (this.paneCount(entry) >= MAX_PANES) {
+      this.options.refuse(`A tab can have up to ${MAX_PANES} panes`);
+      return null;
+    }
+    const start = {
+      cwd: tab.cwd ?? (place === null ? "~" : place.folder),
+      shell: place === null ? null : place.shell,
+    };
+    return this.openIn(place, start, null, { tab, direction });
+  }
+
+  /** Shows the pane on `side` of the visible one, in its group, if there is one. */
+  focusPane(side: Side): void {
+    const entry = this.active && this.entryOf(this.active);
+    if (!entry?.group) return;
+    const next = paneOn(entry.group.layout, entry.tab, side);
+    if (next) this.activate(next);
+  }
+
+  // How many panes the group of `entry` has: one if it is on its own.
+  private paneCount(entry: Entry): number {
+    return entry.group ? panesOf(entry.group.layout).length : 1;
+  }
+
   // Opens a tab at the end of `space`, as it was if it is one that was
   // kept. A new tab is shown; one that is coming back only if its space
-  // shows nothing yet.
-  private async openIn(place: Place, start: TabStart, from: Kept | null): Promise<Tab | null> {
+  // shows nothing yet. With `beside`, it is a new pane next to that tab.
+  private async openIn(
+    place: Place,
+    start: TabStart,
+    from: Kept | null,
+    beside: { tab: Tab; direction: Direction } | null = null,
+  ): Promise<Tab | null> {
     const { list, pinned, screens, textarea, font } = this.options;
     const handlers: TabHandlers = {
       onTitle: (tab) => this.retitle(tab),
       onCommand: (tab) => this.commandChanged(tab),
       isSeen: (tab) => tab === this.active && this.focused,
+      isActive: (tab) => tab === this.active,
       onBackground: (tab) => {
+        tab.pane.style.setProperty("--pane-bg", backgroundOf(tab));
         if (tab === this.active) this.options.onActiveChange(tab);
       },
       onFrame: (tab) => this.preview.changed(tab),
@@ -381,28 +495,26 @@ export class Tabs {
     dot.className = "status-dot tab-status";
     const actions = document.createElement("span");
     actions.className = "tab-actions";
-    const more = document.createElement("button");
-    more.className = "tab-action tab-more";
-    more.title = "More…";
-    more.textContent = "⋯";
-    const close = document.createElement("button");
-    close.className = "tab-action tab-close";
-    close.title = "Close tab";
-    close.textContent = "×";
+    const more = button("tab-action tab-more", "More…", "⋯");
+    const close = button("tab-action tab-close", "Close tab", "×");
     actions.append(more, close);
     row.append(mark, icon, label, dot, actions);
     (place === PINNED ? pinned : list).appendChild(row);
 
     row.addEventListener("click", () => this.activate(tab));
-    row.addEventListener("dblclick", () => this.rename(tab));
+    // A pane is renamed with its group.
+    row.addEventListener("dblclick", () => {
+      if (!this.entryOf(tab)?.group) this.rename(tab);
+    });
     row.addEventListener("pointerdown", (e) => {
       this.preview.leave();
-      this.press(tab, e);
+      // The panes of a group move with it: its own row is the one to drag.
+      if (!this.entryOf(tab)?.group) this.press(row, e);
     });
-    // The card says what a tab in the background is doing: the one shown
-    // says it already, and a row being edited has a popover of its own.
+    // The card says what a tab out of sight is doing: one on screen says it
+    // already, and a row being edited has a popover of its own.
     row.addEventListener("pointerenter", () => {
-      if (tab !== this.active && !this.renaming && !this.inMenu) this.preview.hover(tab, row);
+      if (!this.onScreen(tab) && !this.renaming && !this.inMenu) this.preview.hover(tab, row);
     });
     row.addEventListener("pointerleave", () => this.preview.leave());
     // A double click on a button is two clicks on it, not a rename.
@@ -416,20 +528,210 @@ export class Tabs {
       this.close(tab);
     });
 
-    const entry: Entry = { tab, space: place, row, icon, label, dot };
+    // Next to others, the pane says whose it is when the pointer is on it.
+    const pill = document.createElement("div");
+    pill.className = "pane-label";
+    const pillName = document.createElement("b");
+    const pillStatus = document.createElement("span");
+    pillStatus.className = "pane-status";
+    const pillClose = button("pane-close", "Close pane", "×");
+    pill.append(pillName, pillStatus, pillClose);
+    tab.pane.append(pill);
+    pill.addEventListener("mousedown", (e) => e.preventDefault());
+    pillClose.addEventListener("click", () => this.close(tab));
+    // A press anywhere on a pane makes it the one the keys go to, before
+    // the mouse does anything else there.
+    tab.pane.addEventListener(
+      "pointerdown",
+      () => {
+        if (tab !== this.active && this.entryOf(tab)) this.activate(tab);
+      },
+      { capture: true },
+    );
+
+    const entry: Entry = {
+      tab,
+      space: place,
+      row,
+      icon,
+      label,
+      dot,
+      close,
+      group: null,
+      pill: { name: pillName, status: pillStatus },
+      size: { width: screens.clientWidth, height: screens.clientHeight },
+    };
     this.entries.push(entry);
     placed(entry);
+    // The tab split may have closed meanwhile, or gone elsewhere, or its
+    // group filled up: the new one is then a tab on its own.
+    const base = beside && this.entryOf(beside.tab);
+    if (beside && base && base.space === place && this.paneCount(base) < MAX_PANES) {
+      this.join(entry, base, beside.direction);
+    }
     this.paintStatus(entry);
     this.retitle(tab);
     if (place === this.space) {
       if (!from || !this.lastTab.has(place)) this.activate(tab);
-    } else if (place !== PINNED) {
+      else this.arrange();
+    } else {
       // Its space is not the one shown any more: it waits there.
-      row.hidden = true;
-      this.lastTab.set(place, tab);
+      if (place !== PINNED) {
+        this.unitOf(entry).hidden = true;
+        this.lastTab.set(place, tab);
+      }
+      this.arrange();
     }
     if (from?.restart) void this.offer(tab, from.restart);
     return tab;
+  }
+
+  // Puts the new `entry` in a pane next to the one of `base`, after it.
+  private join(entry: Entry, base: Entry, direction: Direction): void {
+    if (base.group) {
+      base.group.layout = split(base.group.layout, base.tab, direction, entry.tab);
+      entry.group = base.group;
+      this.settle(base.group);
+    } else {
+      this.makeGroup(split(single(base.tab), base.tab, direction, entry.tab), base.tab.look);
+    }
+    this.changed();
+  }
+
+  // Makes a group that looks like `look` of the tabs of `layout`, where
+  // the first of them is in the sidebar. None with fewer than two of them
+  // still open.
+  private makeGroup(layout: Layout<Tab>, look: Look): void {
+    const entries = panesOf(layout)
+      .map((tab) => this.entryOf(tab))
+      .filter((entry) => entry !== undefined);
+    if (entries.length < 2 || entries.some((entry) => entry.group)) return;
+
+    const box = document.createElement("div");
+    box.className = "group";
+    const head = document.createElement("div");
+    head.className = "tab group-head";
+    const mark = document.createElement("span");
+    mark.className = "tab-mark";
+    const icon = document.createElement("span");
+    icon.className = "tab-icon";
+    const label = document.createElement("span");
+    label.className = "tab-title";
+    const count = document.createElement("span");
+    count.className = "group-count";
+    const dot = document.createElement("span");
+    dot.className = "status-dot tab-status";
+    const actions = document.createElement("span");
+    actions.className = "tab-actions";
+    const more = button("tab-action tab-more", "More…", "⋯");
+    const close = button("tab-action tab-close", "Close tab", "×");
+    actions.append(more, close);
+    head.append(mark, icon, label, count, dot, actions);
+    const panes = document.createElement("div");
+    panes.className = "group-panes";
+    box.append(head, panes);
+    box.hidden = entries[0].row.hidden;
+    entries[0].row.before(box);
+
+    const group: Group = {
+      layout,
+      look,
+      last: entries[0].tab,
+      box,
+      head,
+      icon,
+      label,
+      count,
+      dot,
+      panes,
+    };
+    for (const entry of entries) entry.group = group;
+
+    head.addEventListener("click", () => this.activate(group.last));
+    head.addEventListener("dblclick", () => this.renameGroup(group));
+    actions.addEventListener("dblclick", (e) => e.stopPropagation());
+    more.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.groupMenu(group);
+    });
+    head.addEventListener("pointerdown", (e) => {
+      this.preview.leave();
+      this.press(box, e);
+    });
+    head.addEventListener("pointerenter", () => {
+      if (!this.onScreen(group.last) && !this.renaming && !this.inMenu) {
+        this.preview.hover(group.last, head);
+      }
+    });
+    head.addEventListener("pointerleave", () => this.preview.leave());
+    close.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.closeGroup(group);
+    });
+    this.settle(group);
+  }
+
+  // Closes every pane of `group`, the one in front last: the others leave
+  // no gap to fill meanwhile.
+  private closeGroup(group: Group): void {
+    const tabs = panesOf(group.layout).sort(
+      (a, b) => Number(a === this.active) - Number(b === this.active),
+    );
+    for (const tab of tabs) this.close(tab);
+  }
+
+  /** What `tab` is called where the user sees it: the name of its group, if in one. */
+  nameOf(tab: Tab): string {
+    const group = this.entryOf(tab)?.group;
+    return group ? groupTitle(group) : titleOf(tab);
+  }
+
+  // After its layout changed: the tabs of `group` next to each other, in
+  // the order of their panes, among the others and in the sidebar.
+  private settle(group: Group): void {
+    const tabs = panesOf(group.layout);
+    const entries = tabs.map((tab) => this.entryOf(tab)).filter((entry) => entry !== undefined);
+    const first = Math.min(...entries.map((entry) => this.entries.indexOf(entry)));
+    this.entries = this.entries.filter((entry) => !entries.includes(entry));
+    this.entries.splice(first, 0, ...entries);
+    for (const entry of entries) {
+      entry.row.classList.add("pane-row");
+      entry.row.hidden = false;
+      group.panes.append(entry.row);
+      this.paintRow(entry);
+    }
+    if (!tabs.includes(group.last)) group.last = tabs[0];
+    this.paintGroup(group);
+  }
+
+  // Takes `entry` out of its group, its row after the one of the group. A
+  // group left with one tab is no more: that tab is on its own, where the
+  // group was, and looks as the group did.
+  private detach(entry: Entry): void {
+    const group = entry.group;
+    if (!group) return;
+    entry.group = null;
+    entry.row.classList.remove("pane-row");
+    entry.row.hidden = group.box.hidden;
+    group.box.after(entry.row);
+    this.paintRow(entry);
+    const layout = without(group.layout, entry.tab);
+    if (layout && layout.type === "split") {
+      group.layout = layout;
+      this.settle(group);
+    } else {
+      for (const other of this.entries) {
+        if (other.group !== group) continue;
+        other.group = null;
+        other.tab.look = group.look;
+        other.row.classList.remove("pane-row");
+        other.row.hidden = group.box.hidden;
+        group.box.replaceWith(other.row);
+        this.paintRow(other);
+      }
+      group.box.remove();
+    }
+    this.changed();
   }
 
   /** The visible tab offers to start a command again: start it. */
@@ -477,8 +779,11 @@ export class Tabs {
   private commandChanged(tab: Tab): void {
     if (tab.ready) this.runWaiting(tab);
     this.scheduleStatus(tab);
-    const entry = this.entries.find((e) => e.tab === tab);
-    if (entry) this.paintStatus(entry);
+    const entry = this.entryOf(tab);
+    if (entry) {
+      this.paintStatus(entry);
+      if (entry.group) this.paintRow(entry);
+    }
     if (tab === this.active) this.options.onActiveChange(tab);
     this.changed();
     this.preview.changed(tab);
@@ -507,22 +812,53 @@ export class Tabs {
     const before = tab.status;
     tab.status = seen(before);
     if (tab.status === before) return;
-    const entry = this.entries.find((e) => e.tab === tab);
+    const entry = this.entryOf(tab);
     if (entry) this.paintStatus(entry);
   }
 
-  private paintStatus({ tab, dot }: Entry): void {
-    dot.dataset.status = shown(tab.status, Date.now());
-    dot.title = describe(tab.status, Date.now());
+  private paintStatus(entry: Entry): void {
+    const { tab, dot, pill } = entry;
+    const now = Date.now();
+    dot.dataset.status = shown(tab.status, now);
+    dot.title = describe(tab.status, now);
+    pill.status.textContent = describe(tab.status, now);
+    pill.status.dataset.status = shown(tab.status, now);
+    if (entry.group) this.paintGroup(entry.group);
+  }
+
+  // The row of `group`: its name and icon, how many panes it has, and the
+  // state that most wants the eye among theirs.
+  private paintGroup(group: Group): void {
+    const tabs = panesOf(group.layout);
+    const now = Date.now();
+    group.icon.innerHTML = iconMarkup(group.look.icon);
+    group.head.style.setProperty("--tab-color", group.look.color);
+    group.label.textContent = groupTitle(group);
+    group.count.textContent = String(tabs.length);
+    group.count.title = `${tabs.length} panes`;
+    group.dot.dataset.status = loudest(tabs.map((tab) => shown(tab.status, now)));
+    group.head.title = tabs.map(paneText).join("\n");
+  }
+
+  // The row of `entry` and the label of its pane: a tab on its own shows
+  // its name and icon, a pane only where it works and what it ran.
+  private paintRow(entry: Entry): void {
+    const { tab } = entry;
+    const text = entry.group ? paneText(tab) : titleOf(tab);
+    entry.icon.innerHTML = iconMarkup(tab.look.icon);
+    entry.row.style.setProperty("--tab-color", tab.look.color);
+    entry.label.textContent = text;
+    entry.pill.name.textContent = entry.group ? (defaultTitle(tab) ?? UNTITLED) : text;
+    entry.close.title = entry.group ? "Close pane" : "Close tab";
   }
 
   /**
    * Shows the tab at `index` among those of the space that is shown, then
-   * the pinned ones, as the sidebar lists them.
+   * the pinned ones, as the sidebar lists them: a group counts as one.
    */
   select(index: number): void {
-    const entry = [...this.tabsOf(this.space), ...this.tabsOf(PINNED)][index];
-    if (entry) this.activate(entry.tab);
+    const unit = [...this.unitsOf(this.space), ...this.unitsOf(PINNED)][index];
+    if (unit) this.activate(unit.group?.last ?? unit.entries[0].tab);
   }
 
   /**
@@ -530,7 +866,7 @@ export class Tabs {
    * user brings them along, with a tab of its own otherwise.
    */
   async newSpace(): Promise<void> {
-    await this.go("new", null);
+    await this.go("new", []);
   }
 
   /** Makes a new space of the tabs open without a space, without asking. */
@@ -574,51 +910,68 @@ export class Tabs {
   async selectSpace(index: number): Promise<void> {
     const space = this.spaces[index];
     if (!space || space === this.space) return;
-    await this.go(space, null);
+    await this.go(space, []);
   }
 
   /**
-   * Moves `tab` to the end of `target`. If it was the only tab where it is,
-   * the user goes along: the space is shown on it, session alive. If not,
-   * the user stays: an open space takes it alive, a closed or new one as a
-   * saved tab, whose shell ends and starts again when the space reopens.
+   * Moves `tab` to the end of `target`, with the other panes of its group
+   * if it is in one. If it was the only one where it is, the user goes
+   * along: the space is shown on it, sessions alive. If not, the user
+   * stays: an open space takes it alive, a closed or new one as saved tabs,
+   * whose shells end and start again when the space reopens.
    */
   async move(tab: Tab, target: Space | "new"): Promise<void> {
-    const entry = this.entries.find((e) => e.tab === tab);
+    const entry = this.entryOf(tab);
     if (!entry) return;
+    const group = entry.group;
+    const tabs = group ? panesOf(group.layout) : [tab];
     const from = entry.space;
-    if (this.tabsOf(from).length === 1) {
-      await this.go(target, tab);
+    const units = this.unitsOf(from);
+    if (units.length === 1) {
+      await this.go(target, tabs);
       return;
     }
 
     const space = target === "new" ? this.makeSpace() : target;
     const saved = this.closed.get(space);
     if (saved || target === "new") {
-      const into = saved ?? { tabs: [], shown: 0, closedAt: Date.now() };
-      into.tabs.push(kept(tab));
+      const into = saved ?? { tabs: [], shown: 0, closedAt: Date.now(), layouts: [] };
+      const offset = into.tabs.length;
+      for (const moved of tabs) {
+        const movedEntry = this.entryOf(moved);
+        if (movedEntry) into.tabs.push(keptOf(movedEntry));
+      }
+      if (group) into.layouts.push(mapPanes(group.layout, (t) => offset + tabs.indexOf(t)));
       this.closed.set(space, into);
-      this.close(tab);
+      if (group) this.closeGroup(group);
+      else this.close(tab);
       this.announce();
       return;
     }
 
     // Open: it goes on running there, out of sight.
-    const index = this.tabsOf(from).indexOf(entry);
-    const wasActive = tab === this.active;
-    this.entries.splice(this.entries.indexOf(entry), 1);
-    this.entries.push(entry);
-    entry.space = space;
-    placed(entry);
-    entry.row.hidden = true;
-    this.options.list.append(entry.row);
-    if (this.lastTab.get(from) === tab) {
-      const left = this.tabsOf(from);
-      this.lastTab.set(from, left[Math.min(index, left.length - 1)].tab);
+    const element = this.unitOf(entry);
+    const index = units.findIndex((unit) => unit.element === element);
+    const moved = this.entries.filter((e) => tabs.includes(e.tab));
+    const wasActive = moved.some((e) => e.tab === this.active);
+    this.entries = this.entries.filter((e) => !moved.includes(e));
+    this.entries.push(...moved);
+    for (const e of moved) {
+      e.space = space;
+      placed(e);
     }
-    if (!this.lastTab.has(space)) this.lastTab.set(space, tab);
+    element.hidden = true;
+    this.options.list.append(element);
+    const last = this.lastTab.get(from);
+    if (last && tabs.includes(last)) {
+      const left = this.unitsOf(from);
+      const unit = left[Math.min(index, left.length - 1)];
+      this.lastTab.set(from, unit.group?.last ?? unit.entries[0].tab);
+    }
+    if (!this.lastTab.has(space)) this.lastTab.set(space, group?.last ?? tab);
     const next = this.lastTab.get(from);
     if (wasActive && next) this.activate(next);
+    else this.arrange();
     this.announce();
   }
 
@@ -643,12 +996,48 @@ export class Tabs {
 
   /** Refits every tab to the terminal area, hidden ones included. */
   resize(): void {
-    const { clientWidth, clientHeight } = this.options.screens;
-    for (const { tab } of this.entries) resizeTab(tab, clientWidth, clientHeight);
+    this.arrange();
   }
 
   private tabsOf(place: Place): Entry[] {
     return this.entries.filter((entry) => entry.space === place);
+  }
+
+  private entryOf(tab: Tab | null): Entry | undefined {
+    return this.entries.find((entry) => entry.tab === tab);
+  }
+
+  // What the sidebar has of `entry` among the rows of its place: its own
+  // row, or the box of its group.
+  private unitOf(entry: Entry): HTMLElement {
+    return entry.group?.box ?? entry.row;
+  }
+
+  // The rows of `place` as the sidebar lists them: a group is one.
+  private unitsOf(place: Place): Unit[] {
+    const units: Unit[] = [];
+    for (const entry of this.tabsOf(place)) {
+      const last = units[units.length - 1];
+      if (entry.group && last?.group === entry.group) last.entries.push(entry);
+      else units.push({ element: this.unitOf(entry), entries: [entry], group: entry.group });
+    }
+    return units;
+  }
+
+  // The other tabs of the group of `entry`, from the one after it: the
+  // first takes its place on screen when it goes.
+  private matesOf(entry: Entry): Tab[] {
+    if (!entry.group) return [];
+    const tabs = panesOf(entry.group.layout);
+    const at = tabs.indexOf(entry.tab);
+    return [...tabs.slice(at + 1), ...tabs.slice(0, at).reverse()];
+  }
+
+  // Whether `tab` is on screen: the one shown, or a pane next to it.
+  private onScreen(tab: Tab): boolean {
+    if (tab === this.active) return true;
+    const group = this.entryOf(this.active)?.group;
+    return group !== undefined && group !== null && this.entryOf(tab)?.group === group;
   }
 
   private makeSpace(): Space {
@@ -658,11 +1047,12 @@ export class Tabs {
   }
 
   // Shows `target`, reopening it if closed or making it if new, with
-  // `moving` at the end of its tabs. With tabs open without a space, the
-  // user says first whether they come along or close.
-  private async go(target: Space | "new", moving: Tab | null): Promise<void> {
+  // `moving`, a tab or the panes of a group, at the end of its tabs. With
+  // tabs open without a space, the user says first whether they come
+  // along or close.
+  private async go(target: Space | "new", moving: Tab[]): Promise<void> {
     const loose =
-      this.space === null ? this.tabsOf(null).filter((entry) => entry.tab !== moving) : [];
+      this.space === null ? this.tabsOf(null).filter((entry) => !moving.includes(entry.tab)) : [];
     let choice: "bring" | "close" = "close";
     if (loose.length > 0) {
       const into = target === "new" ? "a new space" : target.name;
@@ -673,10 +1063,14 @@ export class Tabs {
 
     const space = target === "new" ? this.makeSpace() : target;
     const brought = this.entries
-      .filter((entry) => entry.tab === moving || (choice === "bring" && loose.includes(entry)))
+      .filter(
+        (entry) => moving.includes(entry.tab) || (choice === "bring" && loose.includes(entry)),
+      )
       .map(({ tab }) => tab);
-    // The tab moved, or the one that was in front, stays in front.
-    const front = moving ?? (this.active && brought.includes(this.active) ? this.active : null);
+    // What was moved, or the tab that was in front, stays in front.
+    const shownBefore = this.active && brought.includes(this.active) ? this.active : null;
+    const front =
+      (this.active && moving.includes(this.active) ? this.active : moving[0]) ?? shownBefore;
     if (brought.length > 0) {
       await this.gather(space, brought, front ?? brought[0]);
     } else if (this.closed.has(space)) {
@@ -692,9 +1086,15 @@ export class Tabs {
 
   // Puts `tabs`, sessions alive, at the end of `space` in the order they
   // have, and shows it on `front`. A closed space opens first with its own
-  // tabs; a space the tabs leave with none goes away.
+  // tabs; a space the tabs leave with none goes away. A group comes whole,
+  // or the tabs that come leave it.
   private async gather(space: Space, tabs: Tab[], front: Tab): Promise<void> {
     const moved = this.entries.filter((entry) => tabs.includes(entry.tab));
+    for (const entry of moved) {
+      if (entry.group && !panesOf(entry.group.layout).every((tab) => tabs.includes(tab))) {
+        this.detach(entry);
+      }
+    }
     const from = new Set(moved.map((entry) => entry.space));
     for (const entry of moved) {
       if (this.lastTab.get(entry.space) === entry.tab) this.lastTab.delete(entry.space);
@@ -711,7 +1111,7 @@ export class Tabs {
       if (at < 0) continue;
       this.entries.splice(at, 1);
       this.entries.push(entry);
-      this.options.list.append(entry.row);
+      this.options.list.append(this.unitOf(entry));
     }
     if (this.space === space && this.entries.some((entry) => entry.tab === front)) {
       this.activate(front);
@@ -736,17 +1136,21 @@ export class Tabs {
     return open[index - 1] ?? open[index + 1];
   }
 
-  // What is kept of an open space when it closes: its tabs as they are now.
+  // What is kept of an open space when it closes: its tabs as they are now,
+  // and its groups, whose look goes with their first tab.
   private keep(space: Space): Saved {
     const entries = this.tabsOf(space);
     const last = this.lastTab.get(space);
+    const groups = new Set(entries.map((entry) => entry.group).filter((group) => group !== null));
+    const position = (tab: Tab) => entries.findIndex((entry) => entry.tab === tab);
     return {
-      tabs: entries.map(({ tab }) => kept(tab)),
+      tabs: entries.map(keptOf),
       shown: Math.max(
         0,
         entries.findIndex((entry) => entry.tab === last),
       ),
       closedAt: Date.now(),
+      layouts: [...groups].map((group) => mapPanes(group.layout, position)),
     };
   }
 
@@ -760,23 +1164,40 @@ export class Tabs {
   }
 
   // Shows a closed space and opens its tabs again, each in the folder it
-  // was in and with the look it had, on the one that was shown; with
-  // `front` false, on the one already in front.
+  // was in and with the look it had, in the groups they were in, on the
+  // one that was shown; with `front` false, on the one already in front.
   private async reopen(space: Space, front = true): Promise<void> {
     const saved = this.closed.get(space);
     if (!saved) return;
     this.closed.delete(space);
     this.show(space);
+    const opened: (Tab | null)[] = [];
     for (const tab of saved.tabs) {
       try {
-        await this.openIn(space, { cwd: tab.cwd ?? space.folder, shell: space.shell }, tab);
+        opened.push(
+          await this.openIn(space, { cwd: tab.cwd ?? space.folder, shell: space.shell }, tab),
+        );
       } catch {
         // A tab that cannot start again is left out: the others still can.
+        opened.push(null);
       }
     }
-    const shown = front ? this.tabsOf(space)[saved.shown]?.tab : undefined;
-    if (shown && space === this.space) this.activate(shown);
+    for (const layout of saved.layouts) {
+      // A tab that did not start leaves its room to the others.
+      const tabs = without<Tab | null>(
+        mapPanes(layout, (index) => opened[index] ?? null),
+        null,
+      ) as Layout<Tab> | null;
+      if (tabs?.type === "split" && panesOf(tabs).every((tab) => this.placeOf(tab) === space)) {
+        this.makeGroup(tabs, panesOf(tabs)[0].look);
+      }
+    }
+    const shown = front ? (opened[saved.shown] ?? undefined) : undefined;
+    if (shown && this.placeOf(shown) !== space) {
+      // Closed meanwhile: whatever is in front stays.
+    } else if (shown && space === this.space) this.activate(shown);
     else if (shown) this.lastTab.set(space, shown);
+    else this.arrange();
     // Not one of them started: a space with no tab goes away.
     this.leaveIfEmpty(space);
   }
@@ -790,7 +1211,7 @@ export class Tabs {
     this.preview.leave();
     this.space = place;
     for (const entry of this.entries) {
-      entry.row.hidden = entry.space !== place && entry.space !== PINNED;
+      this.unitOf(entry).hidden = entry.space !== place && entry.space !== PINNED;
     }
     this.announce();
 
@@ -803,7 +1224,7 @@ export class Tabs {
     if (place !== null) return;
     if (this.active) focusTab(this.active, false);
     this.active = null;
-    for (const entry of this.entries) entry.tab.canvas.hidden = true;
+    this.arrange();
     this.options.onActiveChange(null);
   }
 
@@ -812,37 +1233,75 @@ export class Tabs {
     focusTab(tab, this.focused);
     this.active = tab;
     this.preview.forget(tab);
+    const group = this.entryOf(tab)?.group ?? null;
+    if (group) group.last = tab;
     for (const entry of this.entries) {
       const isActive = entry.tab === tab;
-      entry.tab.canvas.hidden = !isActive;
       entry.row.classList.toggle("active", isActive);
       entry.row.title = isActive ? tooltipOf(entry.tab) : "";
       if (isActive) this.lastTab.set(entry.space, tab);
+      if (entry.group) {
+        entry.group.box.classList.toggle("current", entry.group === group);
+        entry.group.head.classList.toggle("active", entry.group === group);
+      }
     }
+    this.arrange();
     if (this.focused) this.look(tab);
     this.options.onActiveChange(tab);
     this.changed();
   }
 
+  // Puts every pane where it goes: those of the group of the tab shown next
+  // to each other, any other over the whole area, which it takes when it is
+  // shown. Only those on screen are seen, but every one keeps the size it
+  // will have then: a session is resized only when that size changes.
+  private arrange(): void {
+    const { screens } = this.options;
+    const width = screens.clientWidth;
+    const height = screens.clientHeight;
+    const group = this.entryOf(this.active)?.group ?? null;
+    screens.classList.toggle("split", group !== null);
+    const boxes = new Map<Tab, ReturnType<typeof boxOf>>();
+    for (const { group: of } of this.entries) {
+      if (!of || boxes.has(of.last)) continue;
+      for (const { item, rect } of rectsOf(of.layout)) {
+        boxes.set(item, boxOf(rect, width, height, PANE_GAP));
+      }
+    }
+    const whole = { left: 0, top: 0, width, height };
+    for (const entry of this.entries) {
+      const { tab } = entry;
+      const box = (entry.group && boxes.get(tab)) || whole;
+      tab.pane.hidden = !(tab === this.active || (group !== null && entry.group === group));
+      tab.pane.classList.toggle("active", tab === this.active);
+      tab.pane.style.left = `${box.left}px`;
+      tab.pane.style.top = `${box.top}px`;
+      tab.pane.style.width = `${box.width}px`;
+      tab.pane.style.height = `${box.height}px`;
+      if (box.width !== entry.size.width || box.height !== entry.size.height) {
+        entry.size = { width: box.width, height: box.height };
+        resizeTab(tab, box.width, box.height);
+      }
+    }
+  }
+
   private retitle(tab: Tab): void {
-    const entry = this.entries.find((e) => e.tab === tab);
+    const entry = this.entryOf(tab);
     if (!entry) return;
-    const title = titleOf(tab);
-    entry.icon.innerHTML = iconMarkup(tab.look.icon);
-    entry.row.style.setProperty("--tab-color", tab.look.color);
-    entry.label.textContent = title;
+    this.paintRow(entry);
     // The others have their card instead.
     entry.row.title = tab === this.active ? tooltipOf(tab) : "";
+    if (entry.group) this.paintGroup(entry.group);
     if (tab === this.active) this.options.onActiveChange(tab);
     this.changed();
   }
 
-  // What the card of `tab` says: `null` once it is shown or gone.
+  // What the card of `tab` says: `null` once it is on screen or gone.
   private async previewOf(tab: Tab): Promise<PreviewContent | null> {
-    if (tab === this.active || !this.entries.some((e) => e.tab === tab)) return null;
+    if (this.onScreen(tab) || !this.entryOf(tab)) return null;
     const lines = await outputTail(tab, PREVIEW_LINES).catch(() => []);
     const now = Date.now();
-    const title = titleOf(tab);
+    const title = this.nameOf(tab);
     return {
       title: tab.cwd === null ? title : `${title} · ${tab.cwd}`,
       status: shown(tab.status, now),
@@ -858,10 +1317,11 @@ export class Tabs {
     return (list.closest("aside") ?? list).getBoundingClientRect().right + 6;
   }
 
-  // Opens the menu of what can be done with `tab`, next to its row.
+  // Opens the menu of what can be done with `tab`, next to its row. A pane
+  // has none: what is done is done to its group.
   private menu(tab: Tab): void {
-    const entry = this.entries.find((e) => e.tab === tab);
-    if (!entry) return;
+    const entry = this.entryOf(tab);
+    if (!entry || entry.group) return;
     this.preview.leave();
     openMenu({
       title: entry.label.textContent ?? "",
@@ -875,7 +1335,13 @@ export class Tabs {
         // A pinned tab is in no space: it is unpinned into one.
         ...(entry.space === PINNED
           ? []
-          : [{ label: "Move to space…", icon: "›", onSelect: () => this.moveMenu(tab) }]),
+          : [
+              {
+                label: "Move to space…",
+                icon: "›",
+                onSelect: () => this.moveMenu(tab, entry.row),
+              },
+            ]),
         {
           label: "Close tab",
           icon: "×",
@@ -894,15 +1360,48 @@ export class Tabs {
     entry.row.classList.add("in-menu");
   }
 
-  // The spaces `tab` can go to, where its menu was.
-  private moveMenu(tab: Tab): void {
-    const entry = this.entries.find((e) => e.tab === tab);
+  // The menu of a group, next to its row: as the one of a tab, without the
+  // pin, which a group cannot have.
+  private groupMenu(group: Group): void {
+    this.preview.leave();
+    openMenu({
+      title: groupTitle(group),
+      left: this.popoverLeft(),
+      top: group.head.getBoundingClientRect().top - 6,
+      items: [
+        { label: "Rename…", icon: RENAME_ICON, onSelect: () => this.renameGroup(group) },
+        {
+          label: "Move to space…",
+          icon: "›",
+          onSelect: () => this.moveMenu(group.last, group.head),
+        },
+        {
+          label: "Close tab",
+          icon: "×",
+          danger: true,
+          line: true,
+          onSelect: () => this.closeGroup(group),
+        },
+      ],
+      onClose: () => {
+        this.inMenu = null;
+        group.head.classList.remove("in-menu");
+      },
+    });
+    this.inMenu = group;
+    group.head.classList.add("in-menu");
+  }
+
+  // The spaces `tab`, with its group if in one, can go to, next to `anchor`,
+  // where its menu was.
+  private moveMenu(tab: Tab, anchor: HTMLElement): void {
+    const entry = this.entryOf(tab);
     if (!entry) return;
     const others = this.spaces.filter((space) => space !== entry.space);
     openMenu({
       title: "Move to",
       left: this.popoverLeft(),
-      top: entry.row.getBoundingClientRect().top - 6,
+      top: anchor.getBoundingClientRect().top - 6,
       items: [
         ...others.map((space) => ({
           label: space.name,
@@ -924,12 +1423,14 @@ export class Tabs {
   }
 
   // Pins `tab`, session alive: it leaves its space, or the tabs without
-  // one, and stays in front if it was. The only tab of a space leaves a new
-  // one there in its folder: a space with no tab would go away.
+  // one, and its group, and stays in front if it was. The only tab of a
+  // space leaves a new one there in its folder: a space with no tab would
+  // go away.
   private async pin(tab: Tab): Promise<void> {
-    const entry = this.entries.find((e) => e.tab === tab);
+    const entry = this.entryOf(tab);
     if (!entry || entry.space === PINNED) return;
     const from = entry.space;
+    this.detach(entry);
     this.relocate(entry, PINNED);
     if (from === null) {
       this.leaveIfEmpty(from);
@@ -943,14 +1444,15 @@ export class Tabs {
   // shown, or of the tabs without one if no space is open. Over the
   // launcher it is shown, as a tab without a space always is.
   private unpin(tab: Tab): void {
-    const entry = this.entries.find((e) => e.tab === tab);
+    const entry = this.entryOf(tab);
     if (!entry || entry.space !== PINNED) return;
     this.relocate(entry, this.space);
     if (this.active === null) this.activate(tab);
   }
 
-  // Moves `entry`, session alive, to the end of `target`, whose rows are
-  // the ones seen: the space shown, the tabs without one, or the pinned.
+  // Moves `entry`, session alive and on its own, to the end of `target`,
+  // whose rows are the ones seen: the space shown, the tabs without one,
+  // or the pinned.
   private relocate(entry: Entry, target: Place): void {
     const from = entry.space;
     const index = this.tabsOf(from).indexOf(entry);
@@ -969,16 +1471,17 @@ export class Tabs {
     if (entry.tab === this.active || !this.lastTab.has(target)) {
       this.lastTab.set(target, entry.tab);
     }
+    this.arrange();
     this.changed();
   }
 
   private placeOf(tab: Tab | null): Place | undefined {
-    return this.entries.find((entry) => entry.tab === tab)?.space;
+    return this.entryOf(tab)?.space;
   }
 
   // Opens the popover next to the row of `tab`, on the side of the terminal.
   private rename(tab: Tab): void {
-    const entry = this.entries.find((e) => e.tab === tab);
+    const entry = this.entryOf(tab);
     if (!entry) return;
     this.preview.leave();
     const { textarea } = this.options;
@@ -1000,25 +1503,55 @@ export class Tabs {
     this.renaming = tab;
   }
 
-  // A press on the row of `tab`: moved past the threshold, it drags the row
-  // among the others of its space, which make room for it; released, the
-  // tab takes that place and is shown, as a click would.
-  private press(tab: Tab, e: PointerEvent): void {
+  // Opens the popover next to the row of `group`: its name, color and icon.
+  private renameGroup(group: Group): void {
+    this.preview.leave();
+    const first = panesOf(group.layout)[0];
+    const { textarea } = this.options;
+    openRename({
+      row: group.head.getBoundingClientRect(),
+      left: this.popoverLeft(),
+      look: group.look,
+      placeholder: defaultTitle(first) ?? UNTITLED,
+      cwd: first.cwd,
+      onChange: (look) => {
+        group.look = look;
+        this.paintGroup(group);
+        if (this.active && this.entryOf(this.active)?.group === group) {
+          this.options.onActiveChange(this.active);
+        }
+        this.changed();
+      },
+      onClose: () => {
+        this.renaming = null;
+        textarea.focus();
+      },
+    });
+    this.renaming = group;
+  }
+
+  // A press on `element`, the row of a tab or the box of a group: moved
+  // past the threshold, it drags it among the others of its place, which
+  // make room for it; released, it takes that place and is shown, as a
+  // click would.
+  private press(element: HTMLElement, e: PointerEvent): void {
     if (e.button !== 0 || (e.target as Element).closest(".tab-actions")) return;
-    const entry = this.entries.find((x) => x.tab === tab);
-    if (!entry) return;
-    const { row, space: place } = entry;
+    const owner = this.entries.find((entry) => this.unitOf(entry) === element);
+    if (!owner) return;
+    const place = owner.space;
     // The list it is in: the tabs of the space, or the pinned ones.
-    const box = row.parentElement;
-    const rows = this.tabsOf(place).map((x) => x.row);
+    const box = element.parentElement;
+    const rows = this.unitsOf(place).map((unit) => unit.element);
     if (rows.length < 2) return;
-    const from = rows.indexOf(row);
-    // Measured once: the rows that make room only move by transforms.
+    const from = rows.indexOf(element);
+    if (from < 0) return;
+    // Measured once: the rows that make room only move by transforms. A
+    // group may be taller than a row: the others move by its height.
     const boxes = rows.map((r) => r.getBoundingClientRect());
     const centers = boxes.map((box) => box.top + box.height / 2);
-    const step = boxes[1].top - boxes[0].top;
+    const step = boxes[from].height + (boxes[1].top - boxes[0].bottom);
     const min = boxes[0].top - boxes[from].top;
-    const max = boxes[boxes.length - 1].top - boxes[from].top;
+    const max = boxes[boxes.length - 1].bottom - boxes[from].bottom;
     const start = e.clientY;
     let dragging = false;
     let to = from;
@@ -1031,9 +1564,9 @@ export class Tabs {
         closeForm();
         closeMenu();
         box?.classList.add("reordering");
-        row.classList.add("dragging");
+        element.classList.add("dragging");
       }
-      row.style.transform = `translateY(${dy}px)`;
+      element.style.transform = `translateY(${dy}px)`;
       to = dropIndex(centers, from, centers[from] + dy);
       rows.forEach((r, index) => {
         if (index === from) return;
@@ -1042,55 +1575,66 @@ export class Tabs {
       });
     };
     const end = () => {
-      row.removeEventListener("pointermove", move);
-      row.removeEventListener("pointerup", end);
-      row.removeEventListener("pointercancel", end);
+      element.removeEventListener("pointermove", move);
+      element.removeEventListener("pointerup", end);
+      element.removeEventListener("pointercancel", end);
       if (!dragging) return;
       // Without the transition first, the rows would slide back from where
       // they already are.
       box?.classList.remove("reordering");
-      row.classList.remove("dragging");
+      element.classList.remove("dragging");
       for (const r of rows) r.style.transform = "";
       // A tab that opened or closed meanwhile, or a space that changed,
       // makes the places counted at the start wrong: nothing moves.
-      const now = this.tabsOf(place);
-      if (entry.space !== place || now.length !== rows.length || !now.includes(entry)) return;
-      this.place(entry, to);
-      if (place === this.space || place === PINNED) this.activate(tab);
+      const now = this.unitsOf(place);
+      const unit = now.find((u) => u.element === element);
+      if (owner.space !== place || now.length !== rows.length || !unit) return;
+      this.place(unit, to);
+      if (place === this.space || place === PINNED) {
+        this.activate(unit.group?.last ?? unit.entries[0].tab);
+      }
     };
-    row.setPointerCapture(e.pointerId);
-    row.addEventListener("pointermove", move);
-    row.addEventListener("pointerup", end);
-    row.addEventListener("pointercancel", end);
+    element.setPointerCapture(e.pointerId);
+    element.addEventListener("pointermove", move);
+    element.addEventListener("pointerup", end);
+    element.addEventListener("pointercancel", end);
   }
 
-  // Puts `entry` at `index` among the tabs of its space, in the list and
-  // in the sidebar.
-  private place(entry: Entry, index: number): void {
-    if (this.tabsOf(entry.space).indexOf(entry) === index) return;
-    const others = this.tabsOf(entry.space).filter((x) => x !== entry);
-    this.entries.splice(this.entries.indexOf(entry), 1);
+  // Puts `unit` at `index` among the rows of its place, in the list and in
+  // the sidebar.
+  private place(unit: Unit, index: number): void {
+    const units = this.unitsOf(unit.entries[0].space);
+    if (units.findIndex((u) => u.element === unit.element) === index) return;
+    const others = units.filter((u) => u.element !== unit.element);
+    this.entries = this.entries.filter((entry) => !unit.entries.includes(entry));
     const before = others[index];
     if (before) {
-      this.entries.splice(this.entries.indexOf(before), 0, entry);
-      before.row.before(entry.row);
+      this.entries.splice(this.entries.indexOf(before.entries[0]), 0, ...unit.entries);
+      before.element.before(unit.element);
     } else {
       const after = others[others.length - 1];
-      this.entries.splice(this.entries.indexOf(after) + 1, 0, entry);
-      after.row.after(entry.row);
+      const last = after.entries[after.entries.length - 1];
+      this.entries.splice(this.entries.indexOf(last) + 1, 0, ...unit.entries);
+      after.element.after(unit.element);
     }
     this.changed();
   }
 
-  // Closing the visible tab shows the one that takes its place in the
-  // list of its space, or the last one.
+  // Closing the visible tab shows the one that takes its place: the pane
+  // next to it in its group, or the one that takes its place in the list
+  // of its space, or the last one.
   private close(tab: Tab): void {
-    const entry = this.entries.find((e) => e.tab === tab);
+    const entry = this.entryOf(tab);
     if (!entry) return;
     const { space: place } = entry;
+    const mates = this.matesOf(entry);
+    const group = entry.group;
+    this.detach(entry);
     const index = this.tabsOf(place).indexOf(entry);
-    if (tab === this.renaming) closeForm();
-    if (tab === this.inMenu) closeMenu();
+    // A group that is no more takes its popover or menu with it.
+    const gone = group !== null && !this.entries.some((e) => e.group === group);
+    if (tab === this.renaming || (gone && group === this.renaming)) closeForm();
+    if (tab === this.inMenu || (gone && group === this.inMenu)) closeMenu();
     this.preview.forget(tab);
     this.entries.splice(this.entries.indexOf(entry), 1);
     this.waiting.delete(tab);
@@ -1102,11 +1646,13 @@ export class Tabs {
 
     const left = this.tabsOf(place);
     if (this.lastTab.get(place) === tab) {
-      const next = left[Math.min(index, left.length - 1)];
-      if (next) this.lastTab.set(place, next.tab);
+      const next = mates[0] ?? left[Math.min(index, left.length - 1)]?.tab;
+      if (next) this.lastTab.set(place, next);
       else this.lastTab.delete(place);
     }
     if (tab !== this.active) {
+      // The group on screen may be the one it left.
+      this.arrange();
       this.leaveIfEmpty(place);
       return;
     }
@@ -1155,6 +1701,30 @@ function kept(tab: Tab): Kept {
   };
 }
 
+/**
+ * What is kept of the tab of `entry`: the first of a group has the look of
+ * the group, which comes back with it.
+ */
+function keptOf({ tab, group }: Entry): Kept {
+  const first = group && panesOf(group.layout)[0] === tab;
+  return first ? { ...kept(tab), look: group.look } : kept(tab);
+}
+
+/** What the row of a group says: its name, or the folder of its first pane. */
+function groupTitle(group: Group): string {
+  const first = panesOf(group.layout)[0];
+  return group.look.name ?? defaultTitle(first) ?? UNTITLED;
+}
+
+/**
+ * What the row of a pane says: the folder it works in, and the last
+ * command it ran.
+ */
+function paneText(tab: Tab): string {
+  const where = defaultTitle(tab) ?? UNTITLED;
+  return tab.command ? `${where} · ${tab.command}` : where;
+}
+
 function toSaved({ look, cwd, command, restart, favorites }: Kept): SavedTab {
   return { ...look, cwd, command, restart, favorites };
 }
@@ -1171,10 +1741,27 @@ function fromSaved({ cwd, command, restart, favorites, ...look }: SavedTab): Kep
   };
 }
 
+// The groups of a space of the state file, among `count` tabs. One that
+// cannot be read is left out: its tabs come back on their own.
+function readLayouts(saved: SavedLayout[], count: number): Layout<number>[] {
+  const used = new Set<number>();
+  return saved
+    .map((layout) => fromSavedLayout(layout, count, used))
+    .filter((layout) => layout !== null);
+}
+
 // Tells the session of `entry` the space its tab is in now, for the
 // commands it records in the history.
 function placed({ tab, space }: Entry): void {
   setTabSpace(tab, space === null || space === PINNED ? null : space.id);
+}
+
+function button(className: string, title: string, text: string): HTMLButtonElement {
+  const element = document.createElement("button");
+  element.className = className;
+  element.title = title;
+  element.textContent = text;
+  return element;
 }
 
 // One hover away on the row of the tab shown: its name, what the program

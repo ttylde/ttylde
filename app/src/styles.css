@@ -254,18 +254,6 @@ body {
   gap: 1px;
 }
 
-/* While a row is dragged, the others slide to make room for it; the dragged
-   one follows the pointer, above them. */
-.reordering .tab {
-  transition: transform 150ms ease;
-}
-
-.tab.dragging {
-  position: relative;
-  z-index: 1;
-  transition: none;
-}
-
 /* The tabs of the spaces that are not shown keep their rows, out of sight. */
 .tab[hidden] {
   display: none;
@@ -404,6 +392,75 @@ body {
 .tab.in-menu .tab-more {
   background: var(--line);
   color: var(--ink);
+}
+
+/* A group of panes: its row, then, while it is shown, the rows of its
+   panes under it. */
+.group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.group[hidden] {
+  display: none;
+}
+
+.group-panes {
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 0 2px 14px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+
+.group.current .group-panes {
+  display: flex;
+}
+
+.tab.pane-row {
+  padding: 3px 7px;
+  font-size: 11px;
+}
+
+/* A pane is no tab of its own: no mark, no icon, no menu. */
+.pane-row .tab-mark,
+.pane-row .tab-icon,
+.tab.pane-row .tab-more {
+  display: none;
+}
+
+/* The pane the keys go to, among those on screen. */
+.tab.pane-row.active {
+  border-color: transparent;
+  background: rgba(36, 102, 255, 0.1);
+  box-shadow: none;
+}
+
+/* How many panes it has. */
+.group-count {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--line);
+  color: var(--muted);
+  font: 10.5px / 16px var(--mono);
+}
+
+/* While a row is dragged, the others slide to make room for it; the dragged
+   one follows the pointer, above them. A group moves as one row. */
+.reordering > .tab,
+.reordering > .group {
+  transition: transform 150ms ease;
+}
+
+.tab.dragging,
+.group.dragging {
+  position: relative;
+  z-index: 1;
+  transition: none;
 }
 
 #new-tab {
@@ -621,19 +678,21 @@ body.collapsed .header-space.open {
 
 /* The terminal is a panel laid on the window. Its color is the background
    of what is drawn in it, set from the frames. */
+/* Its background is the one of the tab shown, as its frames paint it: the
+   margin around the canvas, which is in its pane, looks like the screen. */
 #terminal {
   position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
   box-sizing: border-box;
-  padding: 10px 14px;
   border-radius: var(--radius-panel);
-  background: var(--panel);
+  background: var(--terminal-bg, var(--panel));
   box-shadow: var(--shadow-panel);
 }
 
-/* The canvases are sized to this box and stacked in its corner. */
+/* The panes are placed in this box, one over the whole of it, or several
+   next to each other. */
 #screens {
   flex: 1;
   min-width: 0;
@@ -641,15 +700,128 @@ body.collapsed .header-space.open {
   overflow: hidden;
 }
 
-.screen {
+/* Its margin, around the canvas, is set by tab.ts: it counts it. */
+.pane {
   position: absolute;
-  top: 0;
-  left: 0;
+  box-sizing: border-box;
+}
+
+.pane[hidden] {
+  display: none;
+}
+
+.screen {
   display: block;
 }
 
-.screen[hidden] {
+/* Several panes: each is a panel of its own, with the window between
+   them, and the one the keys go to is the brighter. */
+#terminal:has(> #screens.split) {
+  background: transparent;
+  box-shadow: none;
+}
+
+#screens.split {
+  overflow: visible;
+}
+
+#screens.split > .pane {
+  border-radius: var(--radius-panel);
+  background: var(--pane-bg, var(--panel));
+  box-shadow: var(--shadow-panel);
+}
+
+#screens.split > .pane .screen {
+  transition: opacity 0.18s ease;
+}
+
+#screens.split > .pane:not(.active) .screen {
+  opacity: 0.62;
+}
+
+/* Over a pane next to others, while the pointer is on it: whose it is,
+   how it is doing, and its close button. */
+.pane-label {
   display: none;
+}
+
+#screens.split > .pane .pane-label {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: calc(100% - 16px);
+  box-sizing: border-box;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 8px rgba(21, 33, 28, 0.08);
+  color: var(--muted);
+  font: 10.5px var(--mono);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+#screens.split > .pane:hover .pane-label {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pane-label b {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--ink);
+  text-overflow: ellipsis;
+}
+
+.pane-status {
+  font-family: var(--ui);
+}
+
+.pane-status:empty {
+  display: none;
+}
+
+.pane-status[data-status="running"] {
+  color: #8a7d12;
+}
+
+.pane-status[data-status="active"] {
+  color: #1f52d6;
+}
+
+.pane-status[data-status="done"] {
+  color: #1f9a6a;
+}
+
+.pane-status[data-status="error"] {
+  color: var(--danger);
+}
+
+.pane-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: #93a19b;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.pane-close:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
 
 /* A command that was running when the tab closed, offered to start again:
@@ -1045,6 +1217,12 @@ body.collapsed .tab-icon,
 body.collapsed .tab-icon .line-icon {
   width: 16px;
   height: 16px;
+}
+
+/* In the rail a group is its own icon: its panes are on screen. */
+body.collapsed .group.current .group-panes,
+body.collapsed .group-count {
+  display: none;
 }
 
 body.collapsed #space-bar,
@@ -2012,6 +2190,41 @@ body.no-space #space-dot .dot {
 
 .header-favorites-button:hover,
 .header-favorites-button.open {
+  background: rgba(21, 33, 28, 0.06);
+  color: var(--ink);
+}
+
+/* At the right end: a new pane on the right, or below. */
+.header-splits {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The same rule as between the other parts of the header. */
+.header-splits::before {
+  content: "";
+  width: 1px;
+  height: 14px;
+  margin-right: 8px;
+  background: rgba(21, 33, 28, 0.14);
+}
+
+.header-split {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.header-split:hover {
   background: rgba(21, 33, 28, 0.06);
   color: var(--ink);
 }
