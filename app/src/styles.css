@@ -178,6 +178,7 @@ body {
 /* The same button for the rail, where there is no room for a name. */
 #space-dot {
   display: none;
+  position: relative;
   place-items: center;
   width: 32px;
   height: 20px;
@@ -2695,4 +2696,149 @@ body.no-space #space-dot .dot {
 .palette-save-text {
   color: var(--ink);
   font: 12.5px var(--mono);
+}
+
+/* A command ended in another space: a small dot on the button of the
+   space menu, by its chevron. Only an end is news, not a command running. */
+.space-status {
+  width: 6px;
+  height: 6px;
+}
+
+.space-status:not([data-status="done"], [data-status="error"]) {
+  display: none;
+}
+
+/* With the sidebar open the header has no menu: the sidebar shows it. */
+body:not(.collapsed) .header-space .space-status {
+  display: none;
+}
+
+/* In the rail the dot sits on the corner of the button. */
+#space-dot .space-status {
+  position: absolute;
+  top: 1px;
+  right: 7px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
+/* In the space menu, after the name: the state of its tabs. */
+.menu-status {
+  width: 7px;
+  height: 7px;
+  margin-left: -4px;
+}
+
+/* Notices, at the bottom right: news from another space to act on. */
+.notices {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 10px 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 10px 30px rgba(21, 33, 28, 0.14),
+    0 0 0 1px rgba(21, 33, 28, 0.05);
+  color: var(--ink);
+  font: 12.5px var(--ui);
+  pointer-events: auto;
+  animation: notice-in 0.18s ease-out;
+}
+
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.notice-title {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.notice-line {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.notice-subject {
+  min-width: 0;
+  overflow: hidden;
+  font: 11.5px var(--mono);
+  text-overflow: ellipsis;
+}
+
+.notice-outcome {
+  flex: none;
+}
+
+.notice-outcome[data-status="done"] {
+  color: #1f9a6a;
+}
+
+.notice-outcome[data-status="error"] {
+  color: var(--danger);
+}
+
+.notice-go {
+  flex: none;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--hover);
+  color: var(--ink);
+  font: 500 12px var(--ui);
+  cursor: pointer;
+}
+
+.notice-go:hover {
+  background: rgba(21, 33, 28, 0.1);
+}
+
+.notice-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: 14px / 1 var(--ui);
+  cursor: pointer;
+}
+
+.notice-close:hover {
+  background: var(--hover);
+  color: var(--ink);
 }

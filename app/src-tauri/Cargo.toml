@@ -14,3 +14,4 @@ tauri-build = { version = "2", features = [] }
 ttylde-core = { path = "../../core" }
 portable-pty = "0.9"
 tauri = { version = "2", features = [] }
+tauri-plugin-notification = "2"

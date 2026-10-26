@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 
 import { type Favorite, FavoriteStore, menuOf, pinnedOf } from "./favorites";
 import {
@@ -15,6 +20,7 @@ import { attachKeyboard } from "./input";
 import { folderName } from "./label";
 import { Launcher } from "./launcher";
 import { isMenuOpen, openMenu } from "./menu";
+import { Notices } from "./notices";
 import { OfferBanner } from "./offer";
 import { Palette } from "./palette";
 import { fontStack } from "./renderer";
@@ -22,6 +28,7 @@ import { isSaveCommandOpen, openSaveCommand } from "./save-command";
 import { ACTIONS_HINT, actionOf, NEW_TAB_HINT, PALETTE_HINT } from "./shortcuts";
 import type { Space } from "./space";
 import { ago, tabCount } from "./space";
+import { loudest } from "./status";
 import {
   backgroundOf,
   jumpToPrompt,
@@ -30,7 +37,7 @@ import {
   type Tab,
   typeCommand,
 } from "./tab";
-import { Tabs } from "./tabs";
+import { type Notice, Tabs } from "./tabs";
 import { toast } from "./toast";
 import type { Font, SavedState } from "./types";
 
@@ -232,6 +239,13 @@ function refocus(): void {
   else launcher.focus();
 }
 
+// Commands that ended in another space: a click goes to their tab.
+const notices = new Notices<Tab>((tab) => {
+  void tabs.reveal(tab).then((open) => {
+    if (!open) toast("That tab is closed");
+  });
+});
+
 const tabs = new Tabs({
   list,
   pinned,
@@ -252,6 +266,8 @@ const tabs = new Tabs({
       return;
     }
     launcher.hide();
+    // Seen: what it had to say is said.
+    notices.forget(tab);
     void appWindow.setTitle(tabs.nameOf(tab));
     const background = backgroundOf(tab);
     if (background !== null) terminal.style.setProperty("--terminal-bg", background);
@@ -289,9 +305,60 @@ const tabs = new Tabs({
         onClose: () => queueMicrotask(() => resolve(null)),
       });
     }),
-  onChange: saveSoon,
+  onChange() {
+    saveSoon();
+    paintSpaceStatus();
+  },
+  onNotice(notice) {
+    notices.show(noticeContent(notice));
+    if (!document.hasFocus()) void notify(notice);
+  },
   refuse: toast,
 });
+
+function noticeContent(notice: Notice) {
+  const error = notice.outcome === "error";
+  return {
+    key: notice.tab,
+    title: `${notice.name} · ${notice.space.name}`,
+    subject: notice.command ?? "The command",
+    outcome: error ? "exited with error" : "done",
+    status: notice.outcome,
+    // An error asks for something to be done: it waits to be seen.
+    sticky: error,
+    action: "Go to tab",
+  };
+}
+
+// The same news in the Notification Center, the window being behind. The
+// click only brings the app forward: the notice waits there.
+async function notify(notice: Notice): Promise<void> {
+  try {
+    const granted = (await isPermissionGranted()) || (await requestPermission()) === "granted";
+    if (!granted) return;
+    const { title, subject, outcome } = noticeContent(notice);
+    sendNotification({ title, body: `${subject} · ${outcome}` });
+  } catch (error) {
+    console.error("ttylde: no notification:", error);
+  }
+}
+
+// The dot of the space button: the state that most wants the eye among the
+// other spaces, when a command ended there. One running is no news.
+function paintSpaceStatus(): void {
+  const others = tabs.spaceList().filter((info) => !info.current);
+  const status = loudest(others.map((info) => info.status));
+  const news = status === "error" || status === "done" ? status : "ready";
+  for (const dot of document.querySelectorAll<HTMLElement>(".space-status")) {
+    dot.dataset.status = news;
+    dot.title =
+      news === "error"
+        ? "A command failed in another space"
+        : news === "done"
+          ? "A command ended in another space"
+          : "";
+  }
+}
 
 const launcher = new Launcher({
   root: element("#launcher"),
@@ -403,10 +470,11 @@ function openSpaceMenu(anchor?: HTMLElement): void {
   openMenu({
     ...(anchor ? under(anchor) : underSpace()),
     items: [
-      ...tabs.spaceList().map(({ space, tabs: count, current, closedAt }, index) => ({
+      ...tabs.spaceList().map(({ space, tabs: count, current, closedAt, status }, index) => ({
         label: space.name,
         // The color is one of the palette, never text typed by someone.
         icon: `<span class="dot" style="background:${space.color}"></span>`,
+        status,
         meta: closedAt === null ? tabCount(count) : `closed · ${ago(closedAt, Date.now())}`,
         hint: index < 9 ? `⌃${index + 1}` : undefined,
         current,

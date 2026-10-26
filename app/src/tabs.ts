@@ -28,7 +28,18 @@ import { PREVIEW_LINES, Preview, type PreviewContent } from "./preview";
 import { openRename } from "./rename";
 import { dropIndex, makeRoom } from "./reorder";
 import { createSpace, type Space, type SpaceChanges, stepIndex } from "./space";
-import { ACTIVE_AFTER, aged, describe, loudest, SHOWN_AFTER, seen, shown } from "./status";
+import {
+  ACTIVE_AFTER,
+  aged,
+  describe,
+  loudest,
+  noticeOf,
+  SHOWN_AFTER,
+  type Status,
+  seen,
+  shown,
+  type TabStatus,
+} from "./status";
 import {
   backgroundOf,
   closeTab,
@@ -154,6 +165,18 @@ export type SpaceInfo = {
   current: boolean;
   /** When it was closed, in milliseconds; `null` if it is open. */
   closedAt: number | null;
+  /** The state that most wants the eye among its tabs: `ready` when closed. */
+  status: Status;
+};
+
+/** A command ended in a tab of a space that is not shown, worth knowing. */
+export type Notice = {
+  tab: Tab;
+  space: Space;
+  /** What the tab is called, or its group. */
+  name: string;
+  command: string | null;
+  outcome: "done" | "error";
 };
 
 export type TabsOptions = {
@@ -175,6 +198,8 @@ export type TabsOptions = {
   onSpaceChange(space: Space | null): void;
   /** Something worth keeping across a restart changed: see `snapshot`. */
   onChange(): void;
+  /** A command ended where the user is not: see `Notice`. */
+  onNotice(notice: Notice): void;
   /**
    * `count` tabs are open without a space and the space called `into` is
    * about to open: whether they come along into it or close. `null`: the
@@ -313,6 +338,9 @@ export class Tabs {
         tabs: saved ? saved.tabs.length : this.tabsOf(space).length,
         current: space === this.space,
         closedAt: saved?.closedAt ?? null,
+        status: saved
+          ? "ready"
+          : loudest(this.tabsOf(space).map(({ tab }) => shown(tab.status, Date.now()))),
       };
     });
   }
@@ -461,6 +489,7 @@ export class Tabs {
     const handlers: TabHandlers = {
       onTitle: (tab) => this.retitle(tab),
       onCommand: (tab) => this.commandChanged(tab),
+      onEnd: (tab, before) => this.commandEnded(tab, before),
       isSeen: (tab) => tab === this.active && this.focused,
       isActive: (tab) => tab === this.active,
       onBackground: (tab) => {
@@ -803,6 +832,22 @@ export class Tabs {
     this.preview.changed(tab);
   }
 
+  // A command of `tab` ended: worth a notice if it ran in a space that is
+  // not shown, where its dot cannot be seen.
+  private commandEnded(tab: Tab, before: TabStatus): void {
+    const place = this.placeOf(tab);
+    if (!place || place === PINNED || place === this.space) return;
+    const outcome = noticeOf(before, tab.status, Date.now());
+    if (!outcome) return;
+    this.options.onNotice({
+      tab,
+      space: place,
+      name: this.nameOf(tab),
+      command: tab.command,
+      outcome,
+    });
+  }
+
   // Sets the timer of a running command: its dot shows after a moment, and
   // it becomes active after a while.
   private scheduleStatus(tab: Tab): void {
@@ -921,6 +966,20 @@ export class Tabs {
   }
 
   /** Shows the space at `index`, if there is one, reopening it if closed. */
+  /**
+   * Shows `tab`, opening its space first if it is another one. `false` if
+   * the tab is not open any more; `true` also when the user changed their
+   * mind about the tabs without a space, and stayed.
+   */
+  async reveal(tab: Tab): Promise<boolean> {
+    const place = this.placeOf(tab);
+    if (place === undefined) return false;
+    if (place !== PINNED && place !== this.space && place !== null) await this.go(place, []);
+    const now = this.placeOf(tab);
+    if (now === PINNED || (now !== undefined && now === this.space)) this.activate(tab);
+    return now !== undefined;
+  }
+
   async selectSpace(index: number): Promise<void> {
     const space = this.spaces[index];
     if (!space || space === this.space) return;
