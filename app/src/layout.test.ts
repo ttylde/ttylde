@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import {
   boxOf,
+  clampRatio,
+  dividersOf,
   fromSavedLayout,
   type Layout,
   MAX_PANES,
@@ -13,6 +15,7 @@ import {
   split,
   toSavedLayout,
   without,
+  withRatio,
 } from "./layout";
 
 // 1 on the left; 2 over 3 on the right, which takes 40% of the width.
@@ -162,5 +165,47 @@ describe("saved layouts", () => {
     ).toBeNull();
     // A layout refused takes no position.
     expect(used.size).toBe(0);
+  });
+});
+
+describe("dividers", () => {
+  // One per split, with the room the split takes.
+  test("finds every split, the outer one first", () => {
+    expect(dividersOf(sample())).toEqual([
+      { path: [], direction: "row", ratio: 0.6, rect: { x: 0, y: 0, w: 1, h: 1 } },
+      { path: ["b"], direction: "column", ratio: 0.5, rect: { x: 0.6, y: 0, w: 0.4, h: 1 } },
+    ]);
+  });
+
+  // Dragging one changes its split only: the one inside keeps its ratio.
+  test("changes the ratio of one split only", () => {
+    const layout = withRatio(sample(), [], 0.3);
+    expect(rectsOf(layout).map(({ rect }) => rect)).toEqual([
+      { x: 0, y: 0, w: 0.3, h: 1 },
+      { x: 0.3, y: 0, w: 0.7, h: 0.5 },
+      { x: 0.3, y: 0.5, w: 0.7, h: 0.5 },
+    ]);
+    const inner = withRatio(sample(), ["b"], 0.25);
+    expect(dividersOf(inner).map((d) => d.ratio)).toEqual([0.6, 0.25]);
+  });
+
+  // A path that leads to a pane changes nothing.
+  test("ignores a path to no split", () => {
+    const layout = sample();
+    expect(withRatio(layout, ["a"], 0.2)).toEqual(layout);
+  });
+});
+
+describe("clampRatio", () => {
+  // Each half keeps its minimum.
+  test("keeps both halves at least as big as asked", () => {
+    expect(clampRatio(0.05, 1000, 100)).toBe(0.1);
+    expect(clampRatio(0.97, 1000, 100)).toBe(0.9);
+    expect(clampRatio(0.4, 1000, 100)).toBe(0.4);
+  });
+
+  // Too short for both: half each.
+  test("splits in half what is too short", () => {
+    expect(clampRatio(0.2, 150, 100)).toBe(0.5);
   });
 });

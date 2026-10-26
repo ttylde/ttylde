@@ -3,7 +3,10 @@ import { PIN_ICON, RENAME_ICON } from "./icons";
 import { folderName } from "./label";
 import {
   boxOf,
+  clampRatio,
   type Direction,
+  type Divider,
+  dividersOf,
   fromSavedLayout,
   type Layout,
   MAX_PANES,
@@ -17,6 +20,7 @@ import {
   split,
   toSavedLayout,
   without,
+  withRatio,
 } from "./layout";
 import { iconMarkup, iconName, type Look, popoverTop } from "./look";
 import { closeMenu, openMenu } from "./menu";
@@ -49,6 +53,12 @@ const DRAG_THRESHOLD = 4;
 
 /** The room between two panes side by side, in CSS pixels. */
 const PANE_GAP = 8;
+
+/** How wide the band that drags a divider is, over the gap, in CSS pixels. */
+const DIVIDER_HIT = 10;
+
+/** How small a pane can be dragged: smaller, a terminal is of no use. */
+const MIN_PANE = { width: 160, height: 80 };
 
 /** Where the pinned tabs are: no space, but seen from every one. */
 const PINNED = "pinned";
@@ -223,6 +233,10 @@ export class Tabs {
   // The one timer of each tab with a state that changes by itself: a
   // running command whose dot shows, then becomes active.
   private statusTimers = new Map<Tab, number>();
+  // The dividers of the group on screen, over its panes, and whether one
+  // is being dragged: that one then moves on its own, and stays the same.
+  private dividers: HTMLElement[] = [];
+  private resizing = false;
   // The card of the row the pointer rests on.
   private preview = new Preview<Tab>({
     content: (tab) => this.previewOf(tab),
@@ -1283,6 +1297,87 @@ export class Tabs {
         resizeTab(tab, box.width, box.height);
       }
     }
+    if (!this.resizing) this.placeDividers(group, width, height);
+  }
+
+  // Puts a divider over each line between the halves of a split of
+  // `group`, in an area of `width` x `height`; none without a group.
+  private placeDividers(group: Group | null, width: number, height: number): void {
+    for (const element of this.dividers) element.remove();
+    this.dividers = [];
+    if (!group) return;
+    for (const divider of dividersOf(group.layout)) {
+      const element = document.createElement("div");
+      element.className = `divider ${divider.direction}`;
+      element.title = "Drag to resize · double-click for half and half";
+      placeDivider(element, divider, width, height);
+      // The keys stay in the terminal.
+      element.addEventListener("mousedown", (e) => e.preventDefault());
+      element.addEventListener("pointerdown", (e) => this.dragDivider(group, divider, element, e));
+      element.addEventListener("dblclick", () => this.setRatio(group, divider, 0.5, true));
+      this.options.screens.append(element);
+      this.dividers.push(element);
+    }
+  }
+
+  // A press on the divider of a split of `group`: dragged, its halves
+  // follow the pointer, a frame at a time, each keeping its minimum. The
+  // ratio is kept on release.
+  private dragDivider(group: Group, divider: Divider, element: HTMLElement, e: PointerEvent): void {
+    if (e.button !== 0) return;
+    const { screens } = this.options;
+    const bounds = screens.getBoundingClientRect();
+    const row = divider.direction === "row";
+    const start = row ? divider.rect.x * bounds.width : divider.rect.y * bounds.height;
+    const size = row ? divider.rect.w * bounds.width : divider.rect.h * bounds.height;
+    const min = row ? MIN_PANE.width : MIN_PANE.height;
+    let ratio = divider.ratio;
+    let moved = false;
+    let frame = 0;
+    this.resizing = true;
+    element.classList.add("dragging");
+    document.body.classList.add(row ? "resizing-row" : "resizing-column");
+
+    const move = (m: PointerEvent) => {
+      const at = (row ? m.clientX - bounds.left : m.clientY - bounds.top) - start;
+      ratio = clampRatio(at / size, size, min);
+      moved = true;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        this.setRatio(group, divider, ratio, false);
+        placeDivider(element, { ...divider, ratio }, bounds.width, bounds.height);
+      });
+    };
+    const end = () => {
+      element.removeEventListener("pointermove", move);
+      element.removeEventListener("pointerup", end);
+      element.removeEventListener("pointercancel", end);
+      cancelAnimationFrame(frame);
+      this.resizing = false;
+      element.classList.remove("dragging");
+      document.body.classList.remove("resizing-row", "resizing-column");
+      // A press without a move leaves the divider where it is, for a
+      // double click to find it there.
+      if (moved) this.setRatio(group, divider, ratio, true);
+    };
+    element.setPointerCapture(e.pointerId);
+    element.addEventListener("pointermove", move);
+    element.addEventListener("pointerup", end);
+    element.addEventListener("pointercancel", end);
+  }
+
+  // Gives `ratio` to the split of `group` that `divider` divides, if the
+  // group still has it; `done`: the drag is over, the layout is kept.
+  private setRatio(group: Group, divider: Divider, ratio: number, done: boolean): void {
+    // A pane that closed meanwhile changes the splits: the drag is over.
+    const same = (d: Divider) =>
+      d.direction === divider.direction && d.path.join() === divider.path.join();
+    if (!this.entries.some((entry) => entry.group === group)) return;
+    if (!dividersOf(group.layout).some(same)) return;
+    group.layout = withRatio(group.layout, divider.path, ratio);
+    this.arrange();
+    if (done) this.changed();
   }
 
   private retitle(tab: Tab): void {
@@ -1754,6 +1849,18 @@ function readLayouts(saved: SavedLayout[], count: number): Layout<number>[] {
 // commands it records in the history.
 function placed({ tab, space }: Entry): void {
   setTabSpace(tab, space === null || space === PINNED ? null : space.id);
+}
+
+// Puts the band of `divider` over the line it moves, in an area of
+// `width` x `height`: across the gap, as long as the split.
+function placeDivider(element: HTMLElement, divider: Divider, width: number, height: number): void {
+  const { rect, ratio } = divider;
+  const row = divider.direction === "row";
+  const at = row ? (rect.x + rect.w * ratio) * width : (rect.y + rect.h * ratio) * height;
+  element.style.left = `${row ? at - DIVIDER_HIT / 2 : rect.x * width}px`;
+  element.style.top = `${row ? rect.y * height : at - DIVIDER_HIT / 2}px`;
+  element.style.width = `${row ? DIVIDER_HIT : rect.w * width}px`;
+  element.style.height = `${row ? rect.h * height : DIVIDER_HIT}px`;
 }
 
 function button(className: string, title: string, text: string): HTMLButtonElement {
