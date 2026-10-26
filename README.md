@@ -20,7 +20,7 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 - **Saved commands**, for one space or global, run with a click. Each tab has its own chips in the header, in the order you drag them to; the others are in the menu next to them, where each one can be edited, made global or of the space, or deleted.
 - **Command blocks**, from the marks of the shell integration: `Cmd+↑` and `Cmd+↓` go from one prompt to the next, and the output of the last command can be copied or selected from the palette.
 - **A card for each tab in the background**: rest the pointer on its row and it shows the name, the state, the last command and the last three lines of its output, following them while it is open.
-- **Split panes**: a tab splits into up to six panes, on the right or below, each a shell of its own in the same folder. The split tab becomes a group, one row in the sidebar with its name, icon and color, and the rows of its panes under it while it is shown. The layout is saved with the space.
+- **Split panes**: a tab splits into up to six panes, on the right or below, each a shell of its own in the same folder. The split tab becomes a group, one row in the sidebar with its name, icon and color, and the rows of its panes under it while it is shown. Drag the line between two panes to resize them, double-click it to split the room in half again. The layout is saved with the space.
 - **A palette** for the commands run before, the saved ones and the actions. The settings of a space (name, color, folder, shell) are among the actions: `@space` keeps only those, and the space menu opens the palette on them.
 - **A config file** for the font and the theme colors.
 

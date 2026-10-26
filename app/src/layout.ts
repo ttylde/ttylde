@@ -86,6 +86,68 @@ export function rectsOf<T>(
   return [...rectsOf(layout.a, a), ...rectsOf(layout.b, b)];
 }
 
+// The two halves of the room `rect` of a split.
+function halves(direction: Direction, ratio: number, { x, y, w, h }: Rect): [Rect, Rect] {
+  return direction === "row"
+    ? [
+        { x, y, w: w * ratio, h },
+        { x: x + w * ratio, y, w: w * (1 - ratio), h },
+      ]
+    : [
+        { x, y, w, h: h * ratio },
+        { x, y: y + h * ratio, w, h: h * (1 - ratio) },
+      ];
+}
+
+/** The way from the top of a layout to one of its splits: a half at each step. */
+export type Path = ("a" | "b")[];
+
+/** The line between the two halves of a split, which dragging moves. */
+export type Divider = {
+  path: Path;
+  direction: Direction;
+  ratio: number;
+  /** The room of the whole split: the line crosses it. */
+  rect: Rect;
+};
+
+/** Every divider of `layout`, outer ones first. */
+export function dividersOf<T>(
+  layout: Layout<T>,
+  rect: Rect = { x: 0, y: 0, w: 1, h: 1 },
+  path: Path = [],
+): Divider[] {
+  if (layout.type === "pane") return [];
+  const [a, b] = halves(layout.direction, layout.ratio, rect);
+  return [
+    { path, direction: layout.direction, ratio: layout.ratio, rect },
+    ...dividersOf(layout.a, a, [...path, "a"]),
+    ...dividersOf(layout.b, b, [...path, "b"]),
+  ];
+}
+
+/**
+ * The same tree, with `ratio` for the split at `path` and no other: the
+ * splits inside its halves keep theirs. Unchanged without a split there.
+ */
+export function withRatio<T>(layout: Layout<T>, path: Path, ratio: number): Layout<T> {
+  if (layout.type === "pane") return layout;
+  if (path.length === 0) return { ...layout, ratio };
+  const [step, ...rest] = path;
+  return step === "a"
+    ? { ...layout, a: withRatio(layout.a, rest, ratio) }
+    : { ...layout, b: withRatio(layout.b, rest, ratio) };
+}
+
+/**
+ * The ratio of a split `size` pixels long, held so that each half keeps
+ * `min` pixels: a split too short for both gets half each.
+ */
+export function clampRatio(ratio: number, size: number, min: number): number {
+  if (size < 2 * min) return 0.5;
+  return Math.min(1 - min / size, Math.max(min / size, ratio));
+}
+
 // Below this, two edges are the same one: fractions add up with errors.
 const EPSILON = 1e-6;
 

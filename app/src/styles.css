@@ -739,6 +739,57 @@ body.collapsed .header-space.open {
   opacity: 0.62;
 }
 
+/* Over the gap between two panes: dragged, it moves the line between them.
+   Its bar shows under the pointer, and in the accent while dragged. */
+.divider {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.divider.row {
+  cursor: col-resize;
+}
+
+.divider.column {
+  cursor: row-resize;
+}
+
+.divider::after {
+  content: "";
+  border-radius: 2px;
+  transition: background 0.15s ease;
+}
+
+.divider.row::after {
+  width: 2px;
+  height: 28px;
+}
+
+.divider.column::after {
+  width: 28px;
+  height: 2px;
+}
+
+.divider:hover::after {
+  background: rgba(21, 33, 28, 0.2);
+}
+
+.divider.dragging::after {
+  background: var(--accent);
+}
+
+/* While a divider is dragged, the pointer keeps its shape wherever it is. */
+body.resizing-row * {
+  cursor: col-resize;
+}
+
+body.resizing-column * {
+  cursor: row-resize;
+}
+
 /* Over a pane next to others, while the pointer is on it: whose it is,
    how it is doing, and its close button. */
 .pane-label {
