@@ -18,7 +18,9 @@ export type Action =
   /** A new pane next to the one shown: on its right in a row, below in a column. */
   | { type: "split"; direction: "row" | "column" }
   /** The pane on that side of the one shown. */
-  | { type: "focus-pane"; side: "left" | "right" | "up" | "down" };
+  | { type: "focus-pane"; side: "left" | "right" | "up" | "down" }
+  /** The terminal alone, without sidebar and header, or back. */
+  | { type: "focus-mode" };
 
 /** The parts of a `KeyboardEvent` a shortcut depends on. */
 export type KeyStroke = Pick<
@@ -43,6 +45,9 @@ export const NEW_COMMAND_HINT = IS_MAC ? "⌘⇧S" : "Ctrl+Shift+S";
 /** How the shortcuts of a new pane are written here. */
 export const SPLIT_RIGHT_HINT = IS_MAC ? "⌘D" : "Ctrl+Shift+E";
 export const SPLIT_DOWN_HINT = IS_MAC ? "⌘⇧D" : "Ctrl+Shift+O";
+
+/** How the shortcut of the focus mode is written here. */
+export const FOCUS_HINT = IS_MAC ? "⌘⇧F" : "Ctrl+Shift+F";
 
 const SIDES = {
   ArrowLeft: "left",
@@ -77,6 +82,11 @@ export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
   if (mac && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "s") {
     return { type: "new-command" };
   }
+  // Cmd+Shift+F, as in the mockup: the focus mode, in and out. Off macOS
+  // it is Ctrl+Shift+F, the modifier of the app.
+  if (mac && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "f") {
+    return { type: "focus-mode" };
+  }
   // Cmd+D on the right, Cmd+Shift+D below, as iTerm2. Off macOS, as
   // Terminator: Ctrl+Shift+E side by side, Ctrl+Shift+O one over the other.
   if (mac && e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "d") {
@@ -101,6 +111,7 @@ export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
   if (!mac && e.key.toLowerCase() === "s") return { type: "new-command" };
   if (!mac && e.key.toLowerCase() === "e") return { type: "split", direction: "row" };
   if (!mac && e.key.toLowerCase() === "o") return { type: "split", direction: "column" };
+  if (!mac && e.key.toLowerCase() === "f") return { type: "focus-mode" };
   // `key`, not `code`: the backslash sits on different keys across layouts.
   // With Shift held it is the bar.
   if (e.key === "\\" || e.key === "|") return { type: "toggle-sidebar" };

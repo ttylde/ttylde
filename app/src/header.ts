@@ -2,6 +2,7 @@ import type { Favorite } from "./favorites";
 import {
   BRANCH_ICON,
   CHEVRON_DOWN_ICON,
+  FOCUS_ICON,
   FOLDER_ICON,
   PLAY_ICON,
   SPLIT_DOWN_ICON,
@@ -10,7 +11,7 @@ import {
 } from "./icons";
 import { folderName } from "./label";
 import type { Direction } from "./layout";
-import { SPLIT_DOWN_HINT, SPLIT_RIGHT_HINT } from "./shortcuts";
+import { FOCUS_HINT, SPLIT_DOWN_HINT, SPLIT_RIGHT_HINT } from "./shortcuts";
 import type { Space } from "./space";
 import { describe, shown, type TabStatus } from "./status";
 import type { GitStatus } from "./types";
@@ -43,6 +44,8 @@ export type HeaderOptions = {
   onFavoritesMenu(anchor: HTMLElement): void;
   /** A split button: a new pane next to the one of the tab. */
   onSplit(direction: Direction): void;
+  /** The button of the focus mode: the terminal alone. */
+  onFocus(): void;
 };
 
 /**
@@ -125,6 +128,12 @@ export class Header {
     right.addEventListener("click", () => options.onSplit("row"));
     down.addEventListener("click", () => options.onSplit("column"));
 
+    // After a rule of its own, as in the mockup: it is not about panes.
+    const tools = span("header-splits");
+    const focus = splitButton(FOCUS_ICON, `Focus mode (${FOCUS_HINT})`);
+    tools.append(focus);
+    focus.addEventListener("click", () => options.onFocus());
+
     root.append(
       this.spaceButton,
       span("header-separator", "›"),
@@ -135,6 +144,7 @@ export class Header {
       span("header-rule"),
       favorites,
       splits,
+      tools,
     );
 
     // The keyboard stays in the terminal.

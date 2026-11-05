@@ -22,6 +22,7 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 - **A card for each tab in the background**: rest the pointer on its row and it shows the name, the state, the last command and the last three lines of its output, following them while it is open.
 - **Split panes**: a tab splits into up to six panes, on the right or below, each a shell of its own in the same folder. The split tab becomes a group, one row in the sidebar with its name, icon and color, and the rows of its panes under it while it is shown. Drag the line between two panes to resize them, double-click it to split the room in half again. The layout is saved with the space.
 - **News from the other spaces**: a command that fails, or ends after a long run, in a space you are not looking at lights a dot on the space menu and shows a notice with a button to go to its tab, and a system notification when the window is behind.
+- **Focus mode**: the terminal alone, without sidebar and header. A pill at the top says the space, the tab and its branch, with a dot for each tab; resting the pointer on it lists them by name, and the space in it opens the space menu. Left alone it shrinks to the tab shown. Two presses of `Esc` leave it: one alone still goes to the terminal.
 - **A palette** for the commands run before, the saved ones and the actions. The settings of a space (name, color, folder, shell) are among the actions: `@space` keeps only those, and the space menu opens the palette on them.
 - **A config file** for the font and the theme colors.
 
@@ -35,6 +36,7 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 | `Ctrl+Tab`, `Ctrl+Shift+Tab` | Next and previous open space |
 | `Cmd+↑`, `Cmd+↓` | Previous and next prompt, at the top of the view |
 | `Cmd+\` | Collapse or expand the sidebar |
+| `Cmd+Shift+F` | Focus mode, in and out (`Esc` twice also leaves it) |
 | `Cmd+P` | Palette: the commands run before, searched by typing |
 | `Cmd+Shift+P` | Palette on its actions |
 | `Cmd+Shift+S` | Save a new command |
