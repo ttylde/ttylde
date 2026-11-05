@@ -96,8 +96,11 @@ type Entry = {
   group: Group | null;
   /** Over its pane, next to others: its name and its state. */
   pill: { name: HTMLElement; status: HTMLElement };
-  /** The size of its pane, the one its session was last fitted to. */
-  size: { width: number; height: number };
+  /**
+   * The size of its pane, the one its session was last fitted to, and the
+   * room kept at its top.
+   */
+  size: { width: number; height: number; room: number };
 };
 
 /**
@@ -167,6 +170,16 @@ export type SpaceInfo = {
   closedAt: number | null;
   /** The state that most wants the eye among its tabs: `ready` when closed. */
   status: Status;
+};
+
+/** A row of the sidebar, as the focus mode lists it: see `Tabs.overview`. */
+export type OverviewRow = {
+  tab: Tab;
+  name: string;
+  /** Its color and icon, or those of its group. */
+  look: Look;
+  status: Status;
+  active: boolean;
 };
 
 /** A command ended in a tab of a space that is not shown, worth knowing. */
@@ -260,6 +273,9 @@ export class Tabs {
   private statusTimers = new Map<Tab, number>();
   // The dividers of the group on screen, over its panes, and whether one
   // is being dragged: that one then moves on its own, and stays the same.
+  // The room kept at the top of the panes that touch the top of the area,
+  // for a tab on its own and for a group: see `setTopRoom`.
+  private topRoom = { whole: 0, split: 0 };
   private dividers: HTMLElement[] = [];
   private resizing = false;
   // The card of the row the pointer rests on.
@@ -463,6 +479,16 @@ export class Tabs {
     return this.openIn(place, start, null, { tab, direction });
   }
 
+  /**
+   * Keeps `whole` pixels free at the top of a tab on its own, and `split`
+   * at the top of the panes of a group that touch the top of the area: the
+   * pill of the focus mode floats there. Zero for both outside it.
+   */
+  setTopRoom(room: { whole: number; split: number }): void {
+    this.topRoom = room;
+    this.arrange();
+  }
+
   /** Shows the pane on `side` of the visible one, in its group, if there is one. */
   focusPane(side: Side): void {
     const entry = this.active && this.entryOf(this.active);
@@ -602,7 +628,7 @@ export class Tabs {
       close,
       group: null,
       pill: { name: pillName, status: pillStatus },
-      size: { width: screens.clientWidth, height: screens.clientHeight },
+      size: { width: screens.clientWidth, height: screens.clientHeight, room: 0 },
     };
     this.entries.push(entry);
     placed(entry);
@@ -699,7 +725,7 @@ export class Tabs {
     });
     head.addEventListener("pointerdown", (e) => {
       this.preview.leave();
-      this.press(box, e);
+      this.press(box, e, head);
     });
     head.addEventListener("pointerenter", () => {
       if (!this.onScreen(group.last) && !this.renaming && !this.inMenu) {
@@ -727,6 +753,25 @@ export class Tabs {
   nameOf(tab: Tab): string {
     const group = this.entryOf(tab)?.group;
     return group ? groupTitle(group) : titleOf(tab);
+  }
+
+  /**
+   * The rows of the sidebar, in its order: those of the space shown, then
+   * the pinned ones. A group is one, on the pane it was left on.
+   */
+  overview(): OverviewRow[] {
+    const now = Date.now();
+    return [...this.unitsOf(this.space), ...this.unitsOf(PINNED)].map(({ entries, group }) => {
+      const tabs = entries.map(({ tab }) => tab);
+      const tab = group?.last ?? tabs[0];
+      return {
+        tab,
+        name: this.nameOf(tab),
+        look: group?.look ?? tab.look,
+        status: loudest(tabs.map((each) => shown(each.status, now))),
+        active: this.active !== null && tabs.includes(this.active),
+      };
+    });
   }
 
   // After its layout changed: the tabs of `group` next to each other, in
@@ -1344,16 +1389,19 @@ export class Tabs {
     const whole = { left: 0, top: 0, width, height };
     for (const entry of this.entries) {
       const { tab } = entry;
-      const box = (entry.group && boxes.get(tab)) || whole;
+      const inGroup = entry.group ? boxes.get(tab) : undefined;
+      const box = inGroup ?? whole;
+      const room = box.top === 0 ? (inGroup ? this.topRoom.split : this.topRoom.whole) : 0;
       tab.pane.hidden = !(tab === this.active || (group !== null && entry.group === group));
       tab.pane.classList.toggle("active", tab === this.active);
       tab.pane.style.left = `${box.left}px`;
       tab.pane.style.top = `${box.top}px`;
       tab.pane.style.width = `${box.width}px`;
       tab.pane.style.height = `${box.height}px`;
-      if (box.width !== entry.size.width || box.height !== entry.size.height) {
-        entry.size = { width: box.width, height: box.height };
-        resizeTab(tab, box.width, box.height);
+      const { size } = entry;
+      if (box.width !== size.width || box.height !== size.height || room !== size.room) {
+        entry.size = { width: box.width, height: box.height, room };
+        resizeTab(tab, box.width, box.height, room);
       }
     }
     if (!this.resizing) this.placeDividers(group, width, height);
@@ -1688,7 +1736,11 @@ export class Tabs {
   // past the threshold, it drags it among the others of its place, which
   // make room for it; released, it takes that place and is shown, as a
   // click would.
-  private press(element: HTMLElement, e: PointerEvent): void {
+  //
+  // The pointer is held by `handle`, the row pressed, not by the box of a
+  // group: held by the box, the click would go to the box and never reach
+  // the row of the group, which opens it.
+  private press(element: HTMLElement, e: PointerEvent, handle: HTMLElement = element): void {
     if (e.button !== 0 || (e.target as Element).closest(".tab-actions")) return;
     const owner = this.entries.find((entry) => this.unitOf(entry) === element);
     if (!owner) return;
@@ -1729,9 +1781,9 @@ export class Tabs {
       });
     };
     const end = () => {
-      element.removeEventListener("pointermove", move);
-      element.removeEventListener("pointerup", end);
-      element.removeEventListener("pointercancel", end);
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
       if (!dragging) return;
       // Without the transition first, the rows would slide back from where
       // they already are.
@@ -1748,10 +1800,10 @@ export class Tabs {
         this.activate(unit.group?.last ?? unit.entries[0].tab);
       }
     };
-    element.setPointerCapture(e.pointerId);
-    element.addEventListener("pointermove", move);
-    element.addEventListener("pointerup", end);
-    element.addEventListener("pointercancel", end);
+    handle.setPointerCapture(e.pointerId);
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
   }
 
   // Puts `unit` at `index` among the rows of its place, in the list and in

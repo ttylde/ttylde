@@ -2842,3 +2842,213 @@ body:not(.collapsed) .header-space .space-status {
   background: var(--hover);
   color: var(--ink);
 }
+
+/* The second rule of the header, before the button of the focus mode. */
+.header-splits + .header-splits::before {
+  margin-left: 8px;
+}
+
+/* The focus mode: the terminal alone. The panes at the top keep room for
+   the pill (see `setTopRoom`), and the window is dragged from that band. */
+body.focus #sidebar,
+body.focus #header {
+  display: none;
+}
+
+body.focus #stage {
+  padding: 8px;
+}
+
+.focus-bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  box-sizing: border-box;
+  padding-top: 8px;
+  white-space: nowrap;
+}
+
+.focus-bar[hidden],
+.focus-pill[hidden],
+.focus-list[hidden] {
+  display: none;
+}
+
+.focus-pill,
+.focus-list {
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 10px 30px rgba(21, 33, 28, 0.14),
+    0 0 0 1px rgba(21, 33, 28, 0.05);
+  color: var(--ink);
+}
+
+.focus-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 160px);
+  padding: 7px 14px;
+  border-radius: 999px;
+  font: 12px var(--ui);
+}
+
+/* Left alone, the pill shrinks to the tab shown: lighter, and smaller. */
+.focus-pill.focus-mini {
+  gap: 7px;
+  padding: 4px 10px 4px 9px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+    0 4px 14px rgba(21, 33, 28, 0.1),
+    0 0 0 1px rgba(21, 33, 28, 0.05);
+  font-size: 11px;
+}
+
+/* The space: the button of the menu of the spaces. */
+.focus-space {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.focus-space:hover,
+.focus-space.open {
+  background: rgba(21, 33, 28, 0.06);
+}
+
+.focus-chevron {
+  display: flex;
+  color: var(--muted);
+}
+
+.focus-space-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+
+.focus-mini .focus-space-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.focus-icon {
+  display: flex;
+  flex: none;
+}
+
+.focus-bar .focus-list .focus-icon .line-icon {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
+.focus-bar .focus-mini .focus-icon .line-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.focus-status {
+  width: 6px;
+  height: 6px;
+}
+
+.focus-mono {
+  overflow: hidden;
+  font-family: var(--mono);
+  text-overflow: ellipsis;
+}
+
+.focus-muted {
+  color: var(--muted);
+}
+
+.focus-rule {
+  flex: none;
+  width: 1px;
+  height: 12px;
+  background: rgba(21, 33, 28, 0.14);
+}
+
+.focus-dots {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+/* One for each row of the sidebar, in the color of its tab; the one shown
+   with a ring. */
+.focus-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot);
+  cursor: pointer;
+}
+
+.focus-dot.active {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 3px var(--dot);
+}
+
+.focus-leave {
+  flex: none;
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.focus-leave:hover {
+  color: var(--ink);
+}
+
+/* The rows by name, under the pill while the pointer is on it. */
+.focus-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  max-width: calc(100% - 160px);
+  padding: 6px;
+  border-radius: 10px;
+  font: 11px var(--mono);
+}
+
+.focus-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.focus-row.active {
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+}
+
+.focus-row:hover {
+  background: rgba(21, 33, 28, 0.08);
+  color: var(--ink);
+}

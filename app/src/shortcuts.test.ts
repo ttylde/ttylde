@@ -147,6 +147,19 @@ describe("actionOf", () => {
     expect(actionOf(stroke({ key: "ArrowUp", code: "ArrowUp" }), true)).toBeNull();
   });
 
+  // Cmd+Shift+F in and out of the focus mode; Ctrl+Shift+F elsewhere.
+  test("Cmd+Shift+F toggles the focus mode", () => {
+    const focus = { type: "focus-mode" };
+    expect(
+      actionOf(stroke({ key: "F", code: "KeyF", metaKey: true, shiftKey: true }), true),
+    ).toEqual(focus);
+    expect(
+      actionOf(stroke({ key: "F", code: "KeyF", ctrlKey: true, shiftKey: true }), false),
+    ).toEqual(focus);
+    // Cmd+F alone is left for a search to come.
+    expect(actionOf(stroke({ key: "f", code: "KeyF", metaKey: true }), true)).toBeNull();
+  });
+
   // Cmd+D on the right, Cmd+Shift+D below; Ctrl+Shift+E and O elsewhere.
   test("Cmd+D splits the pane", () => {
     expect(actionOf(stroke({ key: "d", code: "KeyD", metaKey: true }), true)).toEqual({

@@ -298,10 +298,12 @@ export async function selectLastOutput(tab: Tab): Promise<boolean> {
 
 /**
  * Refits the canvas to a pane of `width` x `height` CSS pixels and resizes
- * the session, if its grid changes.
+ * the session, if its grid changes. `room` is kept free at the top of the
+ * pane, over its margin: the pill of the focus mode floats there.
  */
-export function resizeTab(tab: Tab, width: number, height: number): void {
-  const { cols, rows } = tab.renderer.fit(...inside(width, height));
+export function resizeTab(tab: Tab, width: number, height: number, room = 0): void {
+  tab.pane.style.paddingTop = `${PANE_PADDING.y + room}px`;
+  const { cols, rows } = tab.renderer.fit(...inside(width, height - room));
   void invoke("session_resize", { id: tab.id, cols, rows });
 }
 

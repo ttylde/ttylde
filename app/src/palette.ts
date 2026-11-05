@@ -12,6 +12,7 @@ import {
 } from "./history";
 import { BOOKMARK_ICON, SEARCH_ICON } from "./icons";
 import { COLORS, cleanName } from "./look";
+import { FOCUS_HINT } from "./shortcuts";
 import { SHELLS, type Space, type SpaceChanges, tabCount } from "./space";
 import type { ClosedSpace } from "./tabs";
 
@@ -37,6 +38,9 @@ export type PaletteOptions = {
   newTab(): void;
   closeSpace(): void;
   toggleSidebar(): void;
+  /** Whether the focus mode is on: the terminal alone. */
+  focused(): boolean;
+  toggleFocus(): void;
   /** Reopens the space at `index` among every space. */
   reopen(index: number): void;
   editSpace(changes: SpaceChanges): void;
@@ -615,6 +619,15 @@ export class Palette {
         hint: "⌘\\",
         run: () => this.options.toggleSidebar(),
       },
+      ...(this.options.hasTab()
+        ? [
+            {
+              label: this.options.focused() ? "Leave focus mode" : "Focus mode",
+              hint: FOCUS_HINT,
+              run: () => this.options.toggleFocus(),
+            },
+          ]
+        : []),
       ...this.options.closedSpaces().map(({ index, space: closed }) => ({
         label: `Reopen space "${closed.name}"`,
         hint: "space",

@@ -13,6 +13,7 @@ import {
   openFavoritesMenu,
   refreshFavoritesMenu,
 } from "./favorites-menu";
+import { FocusPill, isDoubleTap } from "./focus";
 import { isFormOpen } from "./form";
 import { Header } from "./header";
 import { PLUS_ICON, SETTINGS_ICON, SIDEBAR_ICON } from "./icons";
@@ -28,7 +29,7 @@ import { isSaveCommandOpen, openSaveCommand } from "./save-command";
 import { ACTIONS_HINT, actionOf, NEW_TAB_HINT, PALETTE_HINT } from "./shortcuts";
 import type { Space } from "./space";
 import { ago, tabCount } from "./space";
-import { loudest } from "./status";
+import { loudest, shown as shownStatus } from "./status";
 import {
   backgroundOf,
   jumpToPrompt,
@@ -124,6 +125,7 @@ await favorites.load();
 const keyboard = attachKeyboard(() => tabs.activeId());
 const header = new Header({
   root: element("#header"),
+  onFocus: () => setFocusMode(true),
   onSpaceMenu: (anchor) => openSpaceMenu(anchor),
   onRunFavorite: (favorite) => runCommand(favorite.command),
   onFavoritesMenu: (anchor) => {
@@ -170,6 +172,64 @@ function showHeader(): void {
           : null,
     },
   );
+  paintPill();
+}
+
+// The focus mode: the terminal alone, and the pill over it. It needs a
+// tab: with none, the launcher is shown, and the mode ends.
+const pill = new FocusPill({
+  root: terminal,
+  leaveHint: "Esc Esc",
+  onLeave: () => setFocusMode(false),
+  onSpaceMenu: (anchor) => openSpaceMenu(anchor, true),
+});
+
+// Over the top of the terminal, the room of the pill: more for a tab on its
+// own, which has nothing else above its text, than for the panes of a group.
+const PILL_ROOM = { whole: 60, split: 34 };
+
+function isFocusMode(): boolean {
+  return document.body.classList.contains("focus");
+}
+
+function setFocusMode(on: boolean): void {
+  const focus = on && shown !== null;
+  if (focus === isFocusMode()) return;
+  closeFavoritesMenu();
+  document.body.classList.toggle("focus", focus);
+  tabs.setTopRoom(focus ? PILL_ROOM : { whole: 0, split: 0 });
+  paintPill();
+}
+
+function paintPill(): void {
+  if (!isFocusMode() || !shown) {
+    pill.hide();
+    return;
+  }
+  const place = tabs.activePlace();
+  const rows = tabs.overview();
+  const look = rows.find((row) => row.active)?.look ?? shown.look;
+  pill.show({
+    key: shown,
+    // A pinned tab, or one without a space, stands in its own color.
+    space:
+      place === "pinned"
+        ? { name: "Pinned", color: look.color }
+        : place
+          ? { name: place.name, color: place.color }
+          : { name: "No space", color: look.color },
+    name: tabs.nameOf(shown),
+    look,
+    status: shownStatus(shown.status, Date.now()),
+    branch: shown.git?.branch ?? null,
+    rows: rows.map(({ tab, name, look, status, active }) => ({
+      name,
+      look,
+      status,
+      active,
+      select: () => void tabs.reveal(tab),
+    })),
+  });
 }
 
 // The saved commands `tab` has in its header, and how many are only in
@@ -260,6 +320,7 @@ const tabs = new Tabs({
     document.body.classList.toggle("empty", tab === null);
     offer.show(tab?.offer ?? null);
     if (!tab) {
+      setFocusMode(false);
       void appWindow.setTitle(DEFAULT_TITLE);
       terminal.style.removeProperty("--terminal-bg");
       launcher.show(tabs.closedSpaces());
@@ -308,6 +369,8 @@ const tabs = new Tabs({
   onChange() {
     saveSoon();
     paintSpaceStatus();
+    // A dot of the pill: a command started or ended, a tab came or went.
+    paintPill();
   },
   onNotice(notice) {
     notices.show(noticeContent(notice));
@@ -397,6 +460,8 @@ const palette = new Palette({
   newTab: () => void tabs.open(),
   closeSpace: () => tabs.closeSpace(),
   toggleSidebar: () => setCollapsed(!isCollapsed()),
+  focused: isFocusMode,
+  toggleFocus: () => setFocusMode(!isFocusMode()),
   reopen: (index) => void tabs.selectSpace(index),
   editSpace: (changes) => tabs.editSpace(changes),
   deleteSpace,
@@ -464,8 +529,9 @@ function under(anchor: HTMLElement): { left: number; top: number; width: number 
 }
 
 // The menu of the spaces, under the space in the sidebar, or under `anchor`.
-function openSpaceMenu(anchor?: HTMLElement): void {
-  if (anchor) header.setMenuOpen(true);
+function openSpaceMenu(anchor?: HTMLElement, fromPill = false): void {
+  if (fromPill) pill.setMenuOpen(true);
+  else if (anchor) header.setMenuOpen(true);
   else spaceName.classList.add("open");
   openMenu({
     ...(anchor ? under(anchor) : underSpace()),
@@ -514,6 +580,7 @@ function openSpaceMenu(anchor?: HTMLElement): void {
     onClose: () => {
       spaceName.classList.remove("open");
       header.setMenuOpen(false);
+      if (fromPill) pill.setMenuOpen(false);
     },
   });
 }
@@ -551,6 +618,7 @@ window.addEventListener(
       return;
     }
     if (!action) {
+      if (leavesFocus(e)) return;
       answerOffer(e);
       return;
     }
@@ -590,10 +658,34 @@ window.addEventListener(
       case "focus-pane":
         tabs.focusPane(action.side);
         break;
+      case "focus-mode":
+        setFocusMode(!isFocusMode());
+        break;
     }
   },
   { capture: true },
 );
+
+// In the focus mode, the second of two presses of Escape close together
+// leaves it, and goes no further. The first has gone to the terminal.
+let lastEscape: number | null = null;
+function leavesFocus(e: KeyboardEvent): boolean {
+  const plain = !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey;
+  if (!isFocusMode() || e.key !== "Escape" || !plain || e.repeat || e.isComposing) {
+    lastEscape = null;
+    return false;
+  }
+  const now = performance.now();
+  if (!isDoubleTap(lastEscape, now)) {
+    lastEscape = now;
+    return false;
+  }
+  lastEscape = null;
+  e.preventDefault();
+  e.stopPropagation();
+  setFocusMode(false);
+  return true;
+}
 
 // With the banner of a command to start again: Enter starts it, Escape
 // leaves the tab at its prompt, and any other key for the terminal does
