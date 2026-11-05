@@ -699,7 +699,7 @@ export class Tabs {
     });
     head.addEventListener("pointerdown", (e) => {
       this.preview.leave();
-      this.press(box, e);
+      this.press(box, e, head);
     });
     head.addEventListener("pointerenter", () => {
       if (!this.onScreen(group.last) && !this.renaming && !this.inMenu) {
@@ -1688,7 +1688,11 @@ export class Tabs {
   // past the threshold, it drags it among the others of its place, which
   // make room for it; released, it takes that place and is shown, as a
   // click would.
-  private press(element: HTMLElement, e: PointerEvent): void {
+  //
+  // The pointer is held by `handle`, the row pressed, not by the box of a
+  // group: held by the box, the click would go to the box and never reach
+  // the row of the group, which opens it.
+  private press(element: HTMLElement, e: PointerEvent, handle: HTMLElement = element): void {
     if (e.button !== 0 || (e.target as Element).closest(".tab-actions")) return;
     const owner = this.entries.find((entry) => this.unitOf(entry) === element);
     if (!owner) return;
@@ -1729,9 +1733,9 @@ export class Tabs {
       });
     };
     const end = () => {
-      element.removeEventListener("pointermove", move);
-      element.removeEventListener("pointerup", end);
-      element.removeEventListener("pointercancel", end);
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
       if (!dragging) return;
       // Without the transition first, the rows would slide back from where
       // they already are.
@@ -1748,10 +1752,10 @@ export class Tabs {
         this.activate(unit.group?.last ?? unit.entries[0].tab);
       }
     };
-    element.setPointerCapture(e.pointerId);
-    element.addEventListener("pointermove", move);
-    element.addEventListener("pointerup", end);
-    element.addEventListener("pointercancel", end);
+    handle.setPointerCapture(e.pointerId);
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
   }
 
   // Puts `unit` at `index` among the rows of its place, in the list and in
