@@ -20,7 +20,7 @@ use alacritty_terminal::{
     selection::SelectionRange,
     term::{cell::Flags, Config, TermDamage, TermMode},
     vte::{
-        ansi::{Color, CursorShape as VtCursorShape, NamedColor, Processor},
+        ansi::{ClearMode, Color, CursorShape as VtCursorShape, Handler, NamedColor, Processor},
         Parser,
     },
     Term,
@@ -502,6 +502,27 @@ impl Emulator {
     pub fn scroll_selection(&mut self, delta: i32, row: u16, col: u16, side: SelectionSide) {
         self.scroll(delta);
         self.update_selection(row, col, side);
+    }
+
+    /// Clears the scrollback and, off the alternate screen, the screen too:
+    /// everything before is gone, as `Cmd+K` in Terminal.app. Returns
+    /// whether the shell should draw its prompt again, at the top: it is
+    /// waiting at it, or without the integration nothing says otherwise.
+    /// A program on the alternate screen keeps its screen, and the output
+    /// of a command running goes on from the top.
+    pub fn clear_scrollback(&mut self) -> bool {
+        self.term.grid_mut().clear_history();
+        self.clear_selection();
+        self.force_full = true;
+        self.dirty = true;
+        if self.term.mode().contains(TermMode::ALT_SCREEN) {
+            return false;
+        }
+        // From the top down, the lines are reset rather than scrolled into
+        // the history, as clearing the whole screen would.
+        self.term.goto(0, 0);
+        self.term.clear_screen(ClearMode::Below);
+        !self.blocks.running()
     }
 
     pub fn scroll_to_bottom(&mut self) {

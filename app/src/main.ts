@@ -32,6 +32,7 @@ import { ago, tabCount } from "./space";
 import { loudest, shown as shownStatus } from "./status";
 import {
   backgroundOf,
+  clearTab,
   jumpToPrompt,
   lastOutput,
   selectLastOutput,
@@ -466,6 +467,10 @@ const palette = new Palette({
   editSpace: (changes) => tabs.editSpace(changes),
   deleteSpace,
   hasTab: () => tabs.activeTab() !== null,
+  clear: () => {
+    const tab = tabs.activeTab();
+    if (tab) clearTab(tab);
+  },
   copyLastOutput: () => void copyLastOutput(),
   selectLastOutput: () => void selectOutput(),
   toast,
@@ -661,6 +666,11 @@ window.addEventListener(
       case "focus-mode":
         setFocusMode(!isFocusMode());
         break;
+      case "clear": {
+        const tab = tabs.activeTab();
+        if (tab) clearTab(tab);
+        break;
+      }
     }
   },
   { capture: true },

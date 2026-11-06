@@ -17,7 +17,10 @@ use crate::{
     error::Result,
     frame::Frame,
     git::{Status, Watcher},
-    input::{encode_focus, encode_key, encode_mouse, encode_paste, Key, Mods, MouseEvent},
+    input::{
+        encode_focus, encode_key, encode_line_edit, encode_mouse, encode_paste, Key, LineEdit,
+        Mods, MouseEvent,
+    },
     pty::{Pty, PtyProbe},
     shell,
     theme::Theme,
@@ -210,6 +213,33 @@ impl Session {
             Some(bytes) => self.pty.write(&bytes).map(|_| true),
             None => Ok(false),
         }
+    }
+
+    /// Writes a line edit to the PTY, as the line editor of the shell reads
+    /// it. Returns `false` if it means nothing where the terminal is.
+    pub fn line_edit(&mut self, edit: LineEdit) -> io::Result<bool> {
+        let mode = {
+            let mut emulator = self.emulator.lock().unwrap();
+            emulator.scroll_to_bottom();
+            emulator.clear_selection();
+            emulator.input_mode()
+        };
+
+        match encode_line_edit(edit, mode) {
+            Some(bytes) => self.pty.write(&bytes).map(|_| true),
+            None => Ok(false),
+        }
+    }
+
+    /// Clears the scrollback and the screen; the shell, if it waits at its
+    /// prompt, draws it again with `Ctrl+L`, the line typed included.
+    pub fn clear(&mut self) -> io::Result<()> {
+        let redraw = self.emulator.lock().unwrap().clear_scrollback();
+        self.emit_frame();
+        if redraw {
+            self.pty.write(b"\x0c")?;
+        }
+        Ok(())
     }
 
     pub fn paste(&mut self, text: &str) -> io::Result<()> {

@@ -1080,3 +1080,59 @@ fn jumping_from_prompt_to_prompt() {
     assert_eq!(emulator.display_offset(), 0);
     assert!(!emulator.jump_to_prompt(false));
 }
+
+// Cmd+K: the history and the screen go, and the shell waiting at its
+// prompt is asked to draw it again.
+#[test]
+fn clearing_empties_the_history_and_the_screen() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    for i in 0..10 {
+        emulator.feed(format!("row {i}\r\n").as_bytes());
+    }
+    emulator.feed(b"$ ls");
+    emulator.scroll(2);
+
+    assert!(emulator.clear_scrollback());
+    assert_eq!(emulator.term.grid().history_size(), 0);
+    assert_eq!(emulator.display_offset(), 0);
+    for row in 0..5 {
+        assert_eq!(emulator.line_text(row), "");
+    }
+    assert_eq!(
+        emulator.term.grid().cursor.point,
+        Point::new(Line(0), Column(0))
+    );
+
+    // The shell clears the screen again as it redraws: none of the old
+    // text goes back into the history. alacritty scrolls at least one line
+    // when it clears the screen, even an empty one.
+    emulator.feed(b"\x1b[H\x1b[2J$ ls");
+    assert!(emulator.term.grid().history_size() <= 1);
+    emulator.scroll(1);
+    assert_eq!(emulator.line_text(0), "");
+    emulator.scroll_to_bottom();
+    assert_eq!(emulator.line_text(0), "$ ls");
+}
+
+#[test]
+fn clearing_while_a_command_runs_leaves_the_shell_alone() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    emulator.feed(format!("{PROMPT}make\r\n\x1b]133;C\x07building").as_bytes());
+    assert!(!emulator.clear_scrollback());
+
+    emulator.feed(format!("done\r\n\x1b]133;D;0\x07{PROMPT}").as_bytes());
+    assert!(emulator.clear_scrollback());
+}
+
+#[test]
+fn clearing_on_the_alternate_screen_keeps_it() {
+    let mut emulator = Emulator::new(20, 5, Theme::default(), 100);
+    for i in 0..10 {
+        emulator.feed(format!("row {i}\r\n").as_bytes());
+    }
+    emulator.feed(b"\x1b[?1049h\x1b[Hvim");
+
+    assert!(!emulator.clear_scrollback());
+    assert_eq!(emulator.term.grid().history_size(), 0);
+    assert_eq!(emulator.line_text(0), "vim");
+}

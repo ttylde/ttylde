@@ -35,6 +35,9 @@ VT parsing and the grid are provided by [`alacritty_terminal`](https://crates.io
 | `Ctrl+1` … `Ctrl+9` | Go to a space, reopening it if it is closed |
 | `Ctrl+Tab`, `Ctrl+Shift+Tab` | Next and previous open space |
 | `Cmd+↑`, `Cmd+↓` | Previous and next prompt, at the top of the view |
+| `Cmd+K` | Clear the screen and the scrollback (`Ctrl+L` keeps the scrollback) |
+| `Cmd+←`, `Cmd+→`, `Cmd+Backspace` | Start and end of the line typed, delete it |
+| `Option+←`, `Option+→`, `Option+Backspace` | One word back and forward, delete the word before |
 | `Cmd+\` | Collapse or expand the sidebar |
 | `Cmd+Shift+F` | Focus mode, in and out (`Esc` twice also leaves it) |
 | `Cmd+P` | Palette: the commands run before, searched by typing |

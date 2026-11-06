@@ -16,7 +16,7 @@ use tauri::State;
 use ttylde_core::config::{Config, Font};
 use ttylde_core::emulator::{SelectionKind, SelectionSide};
 use ttylde_core::history::{Command, History, Recorder};
-use ttylde_core::input::{Key, Mods, MouseEvent};
+use ttylde_core::input::{Key, LineEdit, Mods, MouseEvent};
 use ttylde_core::session::{Session, SessionEvent};
 use ttylde_core::shell;
 
@@ -138,6 +138,27 @@ pub fn session_key(
 ) -> Result<bool, String> {
     state
         .with_session(id, |session| session.key(key, mods))?
+        .map_err(|e| e.to_string())
+}
+
+/// An edit of the line typed, from the macOS keys: `Cmd` and `Option`
+/// with the arrows and Backspace. Returns `false` if it means nothing there.
+#[tauri::command]
+pub fn session_line_edit(
+    state: State<'_, Sessions>,
+    id: u32,
+    edit: LineEdit,
+) -> Result<bool, String> {
+    state
+        .with_session(id, |session| session.line_edit(edit))?
+        .map_err(|e| e.to_string())
+}
+
+/// Clears the scrollback and the screen: `Cmd+K`.
+#[tauri::command]
+pub fn session_clear(state: State<'_, Sessions>, id: u32) -> Result<(), String> {
+    state
+        .with_session(id, |session| session.clear())?
         .map_err(|e| e.to_string())
 }
 

@@ -20,7 +20,9 @@ export type Action =
   /** The pane on that side of the one shown. */
   | { type: "focus-pane"; side: "left" | "right" | "up" | "down" }
   /** The terminal alone, without sidebar and header, or back. */
-  | { type: "focus-mode" };
+  | { type: "focus-mode" }
+  /** The scrollback and the screen of the tab shown, cleared. */
+  | { type: "clear" };
 
 /** The parts of a `KeyboardEvent` a shortcut depends on. */
 export type KeyStroke = Pick<
@@ -28,7 +30,7 @@ export type KeyStroke = Pick<
   "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"
 >;
 
-const IS_MAC = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
+export const IS_MAC = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
 
 /** How the shortcut for a new tab is written on this platform. */
 export const NEW_TAB_HINT = IS_MAC ? "⌘T" : "Ctrl+Shift+T";
@@ -48,6 +50,9 @@ export const SPLIT_DOWN_HINT = IS_MAC ? "⌘⇧D" : "Ctrl+Shift+O";
 
 /** How the shortcut of the focus mode is written here. */
 export const FOCUS_HINT = IS_MAC ? "⌘⇧F" : "Ctrl+Shift+F";
+
+/** How the shortcut that clears the terminal is written here. */
+export const CLEAR_HINT = IS_MAC ? "⌘K" : "Ctrl+Shift+K";
 
 const SIDES = {
   ArrowLeft: "left",
@@ -102,6 +107,9 @@ export function actionOf(e: KeyStroke, mac: boolean = IS_MAC): Action | null {
   }
   if (!hasAppModifier(e, mac)) return null;
   if (e.key.toLowerCase() === "t") return { type: "new-tab" };
+  // Cmd+K, as Terminal.app and iTerm2; Ctrl+Shift+K off macOS, as Konsole
+  // and WezTerm. Ctrl+L stays the shell's, and keeps the scrollback.
+  if (e.key.toLowerCase() === "k") return { type: "clear" };
   // Cmd+Up and Cmd+Down, as Terminal.app; Ctrl+Shift with the arrows off macOS.
   if (e.key === "ArrowUp" || e.key === "ArrowDown") {
     return { type: "jump-prompt", up: e.key === "ArrowUp" };

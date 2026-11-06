@@ -200,4 +200,15 @@ describe("actionOf", () => {
     const word = stroke({ key: "ArrowLeft", code: "ArrowLeft", altKey: true });
     expect(actionOf(word, true)).toBeNull();
   });
+
+  // As Terminal.app; off macOS as Konsole and WezTerm. Plain Ctrl+L stays the shell's.
+  test("Cmd+K clears the terminal on macOS, Ctrl+Shift+K elsewhere", () => {
+    expect(actionOf(stroke({ key: "k", code: "KeyK", metaKey: true }), true)).toEqual({
+      type: "clear",
+    });
+    expect(
+      actionOf(stroke({ key: "K", code: "KeyK", ctrlKey: true, shiftKey: true }), false),
+    ).toEqual({ type: "clear" });
+    expect(actionOf(stroke({ key: "l", code: "KeyL", ctrlKey: true }), false)).toBeNull();
+  });
 });

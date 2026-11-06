@@ -270,6 +270,11 @@ export function jumpToPrompt(tab: Tab, up: boolean): void {
   if (tab.id >= 0) void invoke("session_jump_to_prompt", { id: tab.id, up });
 }
 
+/** Clears the scrollback and the screen of `tab`: the shell draws its prompt again. */
+export function clearTab(tab: Tab): void {
+  if (tab.id >= 0) void invoke("session_clear", { id: tab.id });
+}
+
 /** The output of the last command run in `tab`, `null` if there is none. */
 export async function lastOutput(tab: Tab): Promise<string | null> {
   if (tab.id < 0) return null;

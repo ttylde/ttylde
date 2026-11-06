@@ -105,6 +105,12 @@ impl Blocks {
         }
     }
 
+    /// Whether the command of the last prompt is running, as far as the
+    /// shell said.
+    pub(super) fn running(&self) -> bool {
+        self.states.get(&self.last) == Some(&BlockState::Running)
+    }
+
     /// Whether the shell has marked a prompt: it has the integration.
     pub(super) fn marked(&self) -> bool {
         self.last > 0

@@ -12,7 +12,7 @@ import {
 } from "./history";
 import { BOOKMARK_ICON, SEARCH_ICON } from "./icons";
 import { COLORS, cleanName } from "./look";
-import { FOCUS_HINT } from "./shortcuts";
+import { CLEAR_HINT, FOCUS_HINT } from "./shortcuts";
 import { SHELLS, type Space, type SpaceChanges, tabCount } from "./space";
 import type { ClosedSpace } from "./tabs";
 
@@ -47,6 +47,8 @@ export type PaletteOptions = {
   deleteSpace(): void;
   /** Whether a tab is shown: the actions on its output need one. */
   hasTab(): boolean;
+  /** Clears the scrollback and the screen of the tab shown. */
+  clear(): void;
   /** The output of the last command of the tab shown, to the clipboard. */
   copyLastOutput(): void;
   /** The output of the last command of the tab shown, selected. */
@@ -602,6 +604,11 @@ export class Palette {
         : []),
       ...(this.options.hasTab()
         ? [
+            {
+              label: "Clear terminal",
+              hint: CLEAR_HINT,
+              run: () => this.options.clear(),
+            },
             {
               label: "Copy output of the last command",
               hint: "",

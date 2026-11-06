@@ -298,6 +298,52 @@ pub fn encode_focus(focused: bool, mode: InputMode) -> Option<Vec<u8>> {
     })
 }
 
+/// An edit of the line typed at the prompt, as the macOS keys ask for it:
+/// `Cmd` and `Option` with the arrows and Backspace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum LineEdit {
+    /// `Cmd+Left`: to the start of the line.
+    Start,
+    /// `Cmd+Right`: to the end of the line.
+    End,
+    /// `Cmd+Backspace`: the whole line, back to the prompt.
+    DeleteLine,
+    /// `Option+Left`: one word back.
+    WordBack,
+    /// `Option+Right`: one word forward.
+    WordForward,
+    /// `Option+Backspace`: the word before the cursor.
+    DeleteWord,
+}
+
+/// Encodes a line edit with the keys of the line editors (zsh, bash, fish,
+/// readline): what iTerm2's "Natural text editing" sends. On the alternate
+/// screen the program has keys of its own, and a `Ctrl+A` would mean
+/// something else there: the `Option` keys are sent as they are, the `Cmd`
+/// ones mean nothing (`None`).
+pub fn encode_line_edit(edit: LineEdit, mode: InputMode) -> Option<Vec<u8>> {
+    if mode.alt_screen {
+        let alt = Mods {
+            alt: true,
+            ..Mods::default()
+        };
+        return match edit {
+            LineEdit::WordBack => encode_key(Key::Left, alt, mode),
+            LineEdit::WordForward => encode_key(Key::Right, alt, mode),
+            LineEdit::DeleteWord => encode_key(Key::Backspace, alt, mode),
+            LineEdit::Start | LineEdit::End | LineEdit::DeleteLine => None,
+        };
+    }
+    Some(match edit {
+        LineEdit::Start => vec![0x01],
+        LineEdit::End => vec![0x05],
+        LineEdit::DeleteLine => vec![0x15],
+        LineEdit::WordBack => vec![ESC, b'b'],
+        LineEdit::WordForward => vec![ESC, b'f'],
+        LineEdit::DeleteWord => vec![0x17],
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,6 +583,39 @@ mod tests {
         assert_eq!(
             encode_mouse(release, x10).unwrap(),
             [ESC, b'[', b'M', 3 + 16 + 32, 33, 33]
+        );
+    }
+
+    #[test]
+    fn line_edits_use_the_keys_of_the_line_editors() {
+        let edits = [
+            (LineEdit::Start, &b"\x01"[..]),
+            (LineEdit::End, b"\x05"),
+            (LineEdit::DeleteLine, b"\x15"),
+            (LineEdit::WordBack, b"\x1bb"),
+            (LineEdit::WordForward, b"\x1bf"),
+            (LineEdit::DeleteWord, b"\x17"),
+        ];
+        for (edit, bytes) in edits {
+            assert_eq!(encode_line_edit(edit, InputMode::default()).unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn line_edits_on_the_alternate_screen_are_plain_keys() {
+        let alt_screen = InputMode {
+            alt_screen: true,
+            ..InputMode::default()
+        };
+        assert_eq!(encode_line_edit(LineEdit::Start, alt_screen), None);
+        assert_eq!(encode_line_edit(LineEdit::DeleteLine, alt_screen), None);
+        assert_eq!(
+            encode_line_edit(LineEdit::WordBack, alt_screen).unwrap(),
+            b"\x1b[1;3D"
+        );
+        assert_eq!(
+            encode_line_edit(LineEdit::DeleteWord, alt_screen).unwrap(),
+            b"\x1b\x7f"
         );
     }
 }
