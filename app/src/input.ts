@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { lineEditOf } from "./line-keys";
+
 // Special keys, in the shape the core deserializes as `Key`.
 // `F(n)` and `Char(c)` are variants with data: `{ F: 5 }`, `{ Char: "c" }`.
 type Key =
@@ -71,7 +73,16 @@ export function attachKeyboard(activeId: () => number | null): HTMLTextAreaEleme
 
   textarea.addEventListener("keydown", (e) => {
     if (e.isComposing) return;
-    // Cmd+anything belongs to the system (menus, copy, paste).
+    // On macOS Cmd and Option with the arrows and Backspace edit the line:
+    // the core knows whether a program on the alternate screen has them.
+    const edit = lineEditOf(e);
+    if (edit) {
+      e.preventDefault();
+      const id = activeId();
+      if (id !== null) void invoke("session_line_edit", { id, edit });
+      return;
+    }
+    // Any other Cmd belongs to the system (menus, copy, paste).
     if (e.metaKey) return;
     const key = keyOf(e);
     if (!key) return;

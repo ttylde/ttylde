@@ -41,6 +41,8 @@ fn main() {
             sessions::session_open,
             sessions::session_write,
             sessions::session_key,
+            sessions::session_line_edit,
+            sessions::session_clear,
             sessions::session_mouse,
             sessions::session_paste,
             sessions::session_scroll,
